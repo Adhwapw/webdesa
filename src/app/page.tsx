@@ -52,8 +52,34 @@ export default async function Home() {
     deskripsi: banner?.deskripsi || "Kecamatan Maniis, Kabupaten Purwakarta - Bersama Membangun Desa yang Maju dan Sejahtera",
   };
 
+  const jsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'GovernmentOrganization',
+    name: 'Pemerintah Desa Citamiang',
+    url: 'https://desacitamiang.vercel.app',
+    logo: 'https://desacitamiang.vercel.app/logo-purwakarta.png', // Ganti URL logo
+    address: {
+      '@type': 'PostalAddress',
+      streetAddress: 'Jl. Raya Palumbon',
+      addressLocality: 'Maniis',
+      addressRegion: 'Purwakarta',
+      postalCode: '41162',
+      addressCountry: 'ID'
+    },
+    contactPoint: {
+      '@type': 'ContactPoint',
+      telephone: '+62-812-XXXX-XXXX',
+      contactType: 'customer service'
+    }
+  }
+
   return (
     <main>
+        {/* Script ini tidak akan tampil di layar, tapi dibaca Google */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
       {/* Hero Section */}
       <section className="relative h-[600px] bg-gray-900 overflow-hidden">
         {/* Background Image Logic */}
