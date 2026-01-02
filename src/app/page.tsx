@@ -2,32 +2,35 @@ import Image from "next/image";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { Calendar, MapPin, Store, Users } from "lucide-react";
+import { Dokumentasi, Potensi, UMKM, PerangkatDesa, Banner } from "@/types"; // Import Banner
 
-export const revalidate = 60; // Revalidate setiap 60 detik
+export const revalidate = 60; 
 
-async function getLatestData() {
+interface HomePageData {
+  dokumentasi: Dokumentasi[];
+  potensi: Potensi[];
+  umkm: UMKM[];
+  kepalaDesa: PerangkatDesa | null;
+  banner: Banner | null; // Tambahkan tipe Banner
+}
+
+async function getLatestData(): Promise<HomePageData> {
   try {
-    const [dokumentasi, potensi, umkm, perangkat] = await Promise.all([
-      supabase
-        .from("dokumentasi")
-        .select("*")
-        .order("tanggal", { ascending: false })
-        .limit(3),
+    const [dokumentasi, potensi, umkm, perangkat, bannerData] = await Promise.all([
+      supabase.from("dokumentasi").select("*").order("tanggal", { ascending: false }).limit(3),
       supabase.from("potensi").select("*").eq("status", "aktif").limit(3),
       supabase.from("umkm").select("*").eq("status", "aktif").limit(3),
-      supabase
-        .from("perangkat_desa")
-        .select("*")
-        .eq("status", "aktif")
-        .order("urutan")
-        .limit(1),
+      supabase.from("perangkat_desa").select("*").eq("status", "aktif").order("urutan").limit(1),
+      // Fetch Banner yang aktif
+      supabase.from("banners").select("*").eq("status", "aktif").limit(1).maybeSingle() 
     ]);
 
     return {
-      dokumentasi: dokumentasi.data || [],
-      potensi: potensi.data || [],
-      umkm: umkm.data || [],
-      kepalaDesa: perangkat.data?.[0] || null,
+      dokumentasi: (dokumentasi.data as Dokumentasi[]) || [],
+      potensi: (potensi.data as Potensi[]) || [],
+      umkm: (umkm.data as UMKM[]) || [],
+      kepalaDesa: (perangkat.data?.[0] as PerangkatDesa) || null,
+      banner: (bannerData.data as Banner) || null,
     };
   } catch (error) {
     console.error("Error fetching data:", error);
@@ -36,36 +39,67 @@ async function getLatestData() {
       potensi: [],
       umkm: [],
       kepalaDesa: null,
+      banner: null,
     };
   }
 }
 
 export default async function Home() {
-  const { dokumentasi, potensi, umkm, kepalaDesa } = await getLatestData();
+  const { dokumentasi, potensi, umkm, kepalaDesa, banner } = await getLatestData();
+
+  const heroData = {
+    judul: banner?.judul || "Selamat Datang di Desa Citamiang",
+    deskripsi: banner?.deskripsi || "Kecamatan Maniis, Kabupaten Purwakarta - Bersama Membangun Desa yang Maju dan Sejahtera",
+  };
 
   return (
     <main>
       {/* Hero Section */}
-      <section className="relative h-[600px] bg-gradient-to-br from-green-600 via-green-700 to-green-800">
-        <div className="absolute inset-0 bg-black/20"></div>
-        <div className="relative h-full flex items-center justify-center text-white text-center px-4">
-          <div className="max-w-4xl">
-            <h1 className="text-5xl md:text-6xl font-bold mb-6 animate-fade-in">
-              Selamat Datang di Desa Sukamaju
+      <section className="relative h-[600px] bg-gray-900 overflow-hidden">
+        {/* Background Image Logic */}
+        {banner?.foto_url ? (
+             <div className="absolute inset-0">
+                <Image 
+                    src={banner.foto_url} 
+                    alt="Banner Desa" 
+                    fill 
+                    className="object-cover"
+                    priority
+                />
+                 {/* Gradient Overlay: Hitam di bawah, transparan di atas */}
+                 <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent"></div>
+             </div>
+        ) : (
+            <div className="absolute inset-0 bg-gradient-to-br from-green-600 via-green-700 to-green-800">
+                <div className="absolute inset-0 bg-black/20"></div>
+            </div>
+        )}
+
+        {/* PERUBAHAN POSISI DISINI:
+            1. 'items-center' tetap (tengah horizontal)
+            2. 'justify-center' diganti 'justify-end' (supaya turun ke bawah)
+            3. Ditambah 'pb-20' (jarak dari bawah)
+        */}
+        <div className="relative h-full flex flex-col justify-end items-center text-white text-center px-4 z-10 pb-24">
+          <div className="max-w-4xl animate-fade-in-up">
+            <h1 className="text-4xl md:text-6xl font-bold mb-4 drop-shadow-lg">
+              {heroData.judul}
             </h1>
-            <p className="text-xl md:text-2xl mb-8 text-green-50">
-              Desa yang Asri, Maju, dan Sejahtera
+            <p className="text-lg md:text-xl mb-8 text-green-50 drop-shadow-md">
+              {heroData.deskripsi}
             </p>
+            
+            {/* Tombol */}
             <div className="flex flex-wrap gap-4 justify-center">
               <Link
                 href="/dokumentasi"
-                className="bg-white text-green-700 px-8 py-4 rounded-full font-semibold hover:bg-green-50 transition shadow-lg"
+                className="bg-white text-green-700 px-8 py-3 rounded-full font-semibold hover:bg-green-50 transition shadow-lg text-sm md:text-base"
               >
                 Lihat Dokumentasi
               </Link>
               <Link
                 href="/tentang"
-                className="bg-green-800 text-white px-8 py-4 rounded-full font-semibold hover:bg-green-900 transition shadow-lg border-2 border-white"
+                className="bg-green-700/80 backdrop-blur-sm text-white px-8 py-3 rounded-full font-semibold hover:bg-green-800 transition shadow-lg border border-white/30 text-sm md:text-base"
               >
                 Tentang Kami
               </Link>

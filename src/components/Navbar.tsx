@@ -1,10 +1,17 @@
 'use client'
 import Link from 'next/link'
 import { useState } from 'react'
+import { usePathname } from 'next/navigation'
 import { Menu, X } from 'lucide-react'
 
 export default function Navbar() {
   const [isOpen, setIsOpen] = useState(false)
+  const pathname = usePathname()
+
+  // Sembunyikan navbar di halaman admin
+  if (pathname && pathname.startsWith('/admin')) {
+    return null
+  }
 
   const menuItems = [
     { name: 'Beranda', href: '/' },
@@ -19,8 +26,9 @@ export default function Navbar() {
     <nav className="bg-green-700 text-white shadow-lg sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
+          {/* GANTI NAMA DESA DISINI */}
           <Link href="/" className="text-2xl font-bold">
-            Desa Sukamaju
+            Desa Citamiang
           </Link>
 
           {/* Desktop Menu */}
