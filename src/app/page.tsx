@@ -1,35 +1,45 @@
 import Image from "next/image";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
-import { Calendar, MapPin, Store, Users } from "lucide-react";
-import { Dokumentasi, Potensi, UMKM, PerangkatDesa, Banner } from "@/types"; // Import Banner
+import { Calendar, MapPin, Store, Users, ArrowRight, Quote } from "lucide-react";
+import { Dokumentasi, Potensi, UMKM, PerangkatDesa, Banner } from "@/types";
 
-export const revalidate = 60; 
+// Revalidate data setiap 60 detik agar data selalu update tanpa build ulang
+export const revalidate = 60;
 
 interface HomePageData {
   dokumentasi: Dokumentasi[];
   potensi: Potensi[];
   umkm: UMKM[];
   kepalaDesa: PerangkatDesa | null;
-  banner: Banner | null; // Tambahkan tipe Banner
+  banner: Banner | null;
 }
 
 async function getLatestData(): Promise<HomePageData> {
   try {
+    // Ambil semua data secara paralel agar loading cepat
     const [dokumentasi, potensi, umkm, perangkat, bannerData] = await Promise.all([
+      // 1. Dokumentasi: Ambil 3 terbaru
       supabase.from("dokumentasi").select("*").order("tanggal", { ascending: false }).limit(3),
+      
+      // 2. Potensi: Ambil 3 yang status aktif
       supabase.from("potensi").select("*").eq("status", "aktif").limit(3),
+      
+      // 3. UMKM: Ambil 3 yang status aktif
       supabase.from("umkm").select("*").eq("status", "aktif").limit(3),
-      supabase.from("perangkat_desa").select("*").eq("status", "aktif").order("urutan").limit(1),
-      // Fetch Banner yang aktif
-      supabase.from("banners").select("*").eq("status", "aktif").limit(1).maybeSingle() 
+      
+      // 4. Kepala Desa: Ambil perangkat dengan urutan 1 (paling atas)
+      supabase.from("perangkat_desa").select("*").eq("status", "aktif").order("urutan", { ascending: true }).limit(1),
+
+      // 5. Banner: Ambil 1 yang aktif
+      supabase.from("banners").select("*").eq("status", "aktif").limit(1).maybeSingle()
     ]);
 
     return {
       dokumentasi: (dokumentasi.data as Dokumentasi[]) || [],
       potensi: (potensi.data as Potensi[]) || [],
       umkm: (umkm.data as UMKM[]) || [],
-      kepalaDesa: (perangkat.data?.[0] as PerangkatDesa) || null,
+      kepalaDesa: (perangkat.data?.[0] as PerangkatDesa) || null, // Ambil data pertama
       banner: (bannerData.data as Banner) || null,
     };
   } catch (error) {
@@ -47,168 +57,157 @@ async function getLatestData(): Promise<HomePageData> {
 export default async function Home() {
   const { dokumentasi, potensi, umkm, kepalaDesa, banner } = await getLatestData();
 
+  // Konfigurasi Banner Default (jika tidak ada di database)
   const heroData = {
     judul: banner?.judul || "Selamat Datang di Desa Citamiang",
-    deskripsi: banner?.deskripsi || "Kecamatan Maniis, Kabupaten Purwakarta - Bersama Membangun Desa yang Maju dan Sejahtera",
+    deskripsi: banner?.deskripsi || "Membangun Desa di Ujung Selatan Purwakarta yang Asri dan Berdaya Saing.",
   };
-
+  
+  // JSON-LD untuk SEO Google (Schema Organization)
   const jsonLd = {
     '@context': 'https://schema.org',
     '@type': 'GovernmentOrganization',
     name: 'Pemerintah Desa Citamiang',
-    url: 'https://desacitamiang.vercel.app',
-    logo: 'https://desacitamiang.vercel.app/logo-purwakarta.png', // Ganti URL logo
     address: {
       '@type': 'PostalAddress',
-      streetAddress: 'Jl. Raya Palumbon',
       addressLocality: 'Maniis',
       addressRegion: 'Purwakarta',
-      postalCode: '41162',
       addressCountry: 'ID'
     },
-    contactPoint: {
-      '@type': 'ContactPoint',
-      telephone: '+62-812-XXXX-XXXX',
-      contactType: 'customer service'
-    }
+    url: 'https://desacitamiang.vercel.app'
   }
 
   return (
-    <main>
-        {/* Script ini tidak akan tampil di layar, tapi dibaca Google */}
-      <script
+    <main className="bg-gray-50">
+       {/* Inject JSON-LD Schema */}
+       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
-      {/* Hero Section */}
+
+      {/* 1. HERO SECTION (Banner) */}
       <section className="relative h-[600px] bg-gray-900 overflow-hidden">
-        {/* Background Image Logic */}
         {banner?.foto_url ? (
              <div className="absolute inset-0">
                 <Image 
                     src={banner.foto_url} 
-                    alt="Banner Desa" 
+                    alt="Banner Desa Citamiang" 
                     fill 
                     className="object-cover"
                     priority
                 />
-                 {/* Gradient Overlay: Hitam di bawah, transparan di atas */}
-                 <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent"></div>
+                 <div className="absolute inset-0 bg-gradient-to-t from-gray-900 via-gray-900/40 to-transparent"></div>
              </div>
         ) : (
-            <div className="absolute inset-0 bg-gradient-to-br from-green-600 via-green-700 to-green-800">
-                <div className="absolute inset-0 bg-black/20"></div>
+            <div className="absolute inset-0 bg-gradient-to-br from-green-800 to-green-900">
+                {/* Fallback pattern jika tidak ada foto */}
+                <div className="absolute inset-0 opacity-10 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]"></div>
             </div>
         )}
 
-        {/* PERUBAHAN POSISI DISINI:
-            1. 'items-center' tetap (tengah horizontal)
-            2. 'justify-center' diganti 'justify-end' (supaya turun ke bawah)
-            3. Ditambah 'pb-20' (jarak dari bawah)
-        */}
-        <div className="relative h-full flex flex-col justify-end items-center text-white text-center px-4 z-10 pb-24">
+        <div className="relative h-full flex flex-col justify-end items-center text-white text-center px-4 z-10 pb-20 md:pb-32">
           <div className="max-w-4xl animate-fade-in-up">
-            <h1 className="text-4xl md:text-6xl font-bold mb-4 drop-shadow-lg">
+            <span className="inline-block py-1 px-3 rounded-full bg-green-500/20 border border-green-400/30 backdrop-blur-md text-green-300 text-sm font-medium mb-4">
+              Website Resmi Pemerintah Desa
+            </span>
+            <h1 className="text-4xl md:text-6xl font-bold mb-6 drop-shadow-lg leading-tight">
               {heroData.judul}
             </h1>
-            <p className="text-lg md:text-xl mb-8 text-green-50 drop-shadow-md">
+            <p className="text-lg md:text-xl mb-8 text-gray-200 drop-shadow-md max-w-2xl mx-auto">
               {heroData.deskripsi}
             </p>
             
-            {/* Tombol */}
             <div className="flex flex-wrap gap-4 justify-center">
               <Link
-                href="/dokumentasi"
-                className="bg-white text-green-700 px-8 py-3 rounded-full font-semibold hover:bg-green-50 transition shadow-lg text-sm md:text-base"
+                href="/tentang"
+                className="bg-green-600 hover:bg-green-700 text-white px-8 py-3.5 rounded-full font-bold transition shadow-lg shadow-green-900/20 flex items-center gap-2"
               >
-                Lihat Dokumentasi
+                Profil Desa <ArrowRight size={18} />
               </Link>
               <Link
-                href="/tentang"
-                className="bg-green-700/80 backdrop-blur-sm text-white px-8 py-3 rounded-full font-semibold hover:bg-green-800 transition shadow-lg border border-white/30 text-sm md:text-base"
+                href="/dokumentasi"
+                className="bg-white/10 hover:bg-white/20 backdrop-blur-sm text-white border border-white/30 px-8 py-3.5 rounded-full font-bold transition flex items-center gap-2"
               >
-                Tentang Kami
+                Lihat Kegiatan
               </Link>
             </div>
           </div>
         </div>
       </section>
 
-      {/* Stats Section */}
-      <section className="py-12 bg-white">
-        <div className="max-w-7xl mx-auto px-4">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-            <div className="text-center p-6 bg-green-50 rounded-xl">
-              <Users className="mx-auto mb-3 text-green-600" size={40} />
-              <h3 className="text-3xl font-bold text-gray-800">2,500+</h3>
-              <p className="text-gray-600">Penduduk</p>
+      {/* 2. STATISTIK SINGKAT (Floating Cards) */}
+      <section className="relative z-20 -mt-16 px-4">
+        <div className="max-w-7xl mx-auto grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
+          {[
+            { label: 'Penduduk', val: '2,500+', icon: Users, color: 'text-blue-600', bg: 'bg-blue-50' },
+            { label: 'UMKM Aktif', val: `${umkm.length}+`, icon: Store, color: 'text-orange-600', bg: 'bg-orange-50' },
+            { label: 'Potensi Desa', val: `${potensi.length}+`, icon: MapPin, color: 'text-green-600', bg: 'bg-green-50' },
+            { label: 'Kegiatan', val: '50+', icon: Calendar, color: 'text-purple-600', bg: 'bg-purple-50' },
+          ].map((stat, idx) => (
+            <div key={idx} className="bg-white p-6 rounded-xl shadow-lg border border-gray-100 flex flex-col items-center text-center hover:-translate-y-1 transition duration-300">
+              <div className={`${stat.bg} ${stat.color} w-12 h-12 rounded-full flex items-center justify-center mb-3`}>
+                <stat.icon size={24} />
+              </div>
+              <h3 className="text-2xl font-bold text-gray-800">{stat.val}</h3>
+              <p className="text-sm text-gray-500 font-medium">{stat.label}</p>
             </div>
-            <div className="text-center p-6 bg-blue-50 rounded-xl">
-              <Store className="mx-auto mb-3 text-blue-600" size={40} />
-              <h3 className="text-3xl font-bold text-gray-800">
-                {umkm.length}+
-              </h3>
-              <p className="text-gray-600">UMKM Aktif</p>
-            </div>
-            <div className="text-center p-6 bg-purple-50 rounded-xl">
-              <MapPin className="mx-auto mb-3 text-purple-600" size={40} />
-              <h3 className="text-3xl font-bold text-gray-800">
-                {potensi.length}+
-              </h3>
-              <p className="text-gray-600">Potensi Desa</p>
-            </div>
-            <div className="text-center p-6 bg-orange-50 rounded-xl">
-              <Calendar className="mx-auto mb-3 text-orange-600" size={40} />
-              <h3 className="text-3xl font-bold text-gray-800">50+</h3>
-              <p className="text-gray-600">Kegiatan/Tahun</p>
-            </div>
-          </div>
+          ))}
         </div>
       </section>
 
-      {/* Sambutan Kepala Desa */}
+      {/* 3. SAMBUTAN KEPALA DESA (Connected to DB) */}
       {kepalaDesa && (
-        <section className="py-16 bg-gradient-to-br from-green-50 to-blue-50">
+        <section className="py-20 md:py-28">
           <div className="max-w-6xl mx-auto px-4">
-            <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
-              <div className="md:flex">
-                <div className="md:w-1/3 bg-gradient-to-br from-green-600 to-green-700 p-8 flex items-center justify-center">
+            <div className="bg-white rounded-3xl p-8 md:p-12 shadow-xl border border-gray-100 relative overflow-hidden flex flex-col md:flex-row items-center gap-10 md:gap-16">
+              
+              {/* Dekorasi Background */}
+              <div className="absolute top-0 right-0 w-64 h-64 bg-green-50 rounded-full -translate-y-1/2 translate-x-1/2 opacity-50"></div>
+              
+              {/* Foto Kades */}
+              <div className="relative shrink-0">
+                <div className="w-48 h-48 md:w-64 md:h-64 rounded-full overflow-hidden border-[6px] border-white shadow-2xl relative z-10">
                   {kepalaDesa.foto_url ? (
-                    <div className="relative w-48 h-48 rounded-full overflow-hidden border-4 border-white shadow-lg">
-                      <Image
-                        src={kepalaDesa.foto_url}
-                        alt={kepalaDesa.nama_lengkap}
-                        fill
-                        className="object-cover"
-                      />
-                    </div>
+                    <Image
+                      src={kepalaDesa.foto_url}
+                      alt={kepalaDesa.nama_lengkap}
+                      fill
+                      className="object-cover"
+                    />
                   ) : (
-                    <div className="w-48 h-48 rounded-full bg-white/20 flex items-center justify-center border-4 border-white">
-                      <span className="text-7xl text-white font-bold">
-                        {kepalaDesa.nama_lengkap.charAt(0)}
-                      </span>
+                    <div className="w-full h-full bg-gray-200 flex items-center justify-center">
+                      <Users size={64} className="text-gray-400" />
                     </div>
                   )}
                 </div>
-                <div className="md:w-2/3 p-8">
-                  <h2 className="text-3xl font-bold text-gray-800 mb-2">
-                    Sambutan Kepala Desa
-                  </h2>
-                  <h3 className="text-xl text-green-600 font-semibold mb-4">
-                    {kepalaDesa.nama_lengkap}
-                  </h3>
-                  <p className="text-gray-600 leading-relaxed mb-6">
-                    {`Assalamu'alaikum Warahmatullahi Wabarakatuh. Selamat datang di website resmi Desa Sukamaju. 
-  Kami berkomitmen untuk terus meningkatkan pelayanan kepada masyarakat dan membangun desa 
-  yang lebih maju, sejahtera, dan mandiri. Website ini dibuat untuk memberikan informasi 
-  terkini tentang kegiatan, potensi, dan UMKM yang ada di desa kita.`}
+                {/* Badge Jabatan */}
+                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 bg-green-700 text-white px-4 py-1.5 rounded-full text-sm font-bold shadow-lg whitespace-nowrap">
+                  {kepalaDesa.jabatan}
+                </div>
+              </div>
+
+              {/* Teks Sambutan */}
+              <div className="relative z-10 text-center md:text-left">
+                <Quote className="text-green-200 mb-4 mx-auto md:mx-0" size={48} />
+                <h2 className="text-3xl font-bold text-gray-800 mb-2">Sambutan Kepala Desa</h2>
+                <h3 className="text-xl text-green-700 font-bold mb-6">{kepalaDesa.nama_lengkap}</h3>
+                <div className="space-y-4 text-gray-600 leading-relaxed text-lg">
+                  <p>
+                    "Assalamu'alaikum Warahmatullahi Wabarakatuh. Sampurasun!"
                   </p>
-                  <Link
-                    href="/perangkat"
-                    className="inline-block bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition"
-                  >
-                    Lihat Struktur Organisasi
-                  </Link>
+                  <p>
+                    Selamat datang di website resmi <strong>Desa Citamiang</strong>. Website ini kami hadirkan sebagai wujud transparansi dan upaya peningkatan pelayanan publik bagi masyarakat.
+                  </p>
+                  <p>
+                    Melalui media ini, kami berharap dapat memberikan informasi seluas-luasnya mengenai potensi desa, pembangunan, serta kegiatan kemasyarakatan di Desa Citamiang. Mari bersama-sama kita bangun desa kita tercinta ini agar semakin maju, mandiri, dan sejahtera.
+                  </p>
+                </div>
+                <div className="mt-8">
+                    <img 
+                        src="https://upload.wikimedia.org/wikipedia/commons/2/29/Tanda_Tangan_Contoh.png" 
+                        alt="Tanda Tangan" 
+                        className="h-12 opacity-50 mx-auto md:mx-0" 
+                    />
                 </div>
               </div>
             </div>
@@ -216,255 +215,81 @@ export default async function Home() {
         </section>
       )}
 
-      {/* Dokumentasi Terbaru */}
-      <section className="py-16 bg-white">
+      {/* 4. DOKUMENTASI TERBARU */}
+      <section className="py-20 bg-gray-100">
         <div className="max-w-7xl mx-auto px-4">
-          <div className="flex justify-between items-center mb-10">
+          <div className="flex flex-col md:flex-row justify-between items-end mb-12 gap-4">
             <div>
-              <h2 className="text-3xl md:text-4xl font-bold text-gray-800">
-                Dokumentasi Kegiatan
-              </h2>
-              <p className="text-gray-600 mt-2">
-                Kegiatan terbaru di desa kami
-              </p>
+              <span className="text-green-600 font-bold tracking-wider text-sm uppercase">Kabar Desa</span>
+              <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mt-2">Kegiatan Terbaru</h2>
             </div>
-            <Link
-              href="/dokumentasi"
-              className="text-green-600 hover:text-green-700 font-semibold flex items-center gap-2"
-            >
-              Lihat Semua →
+            <Link href="/dokumentasi" className="text-green-700 font-bold hover:text-green-800 flex items-center gap-2 group">
+              Lihat Galeri <ArrowRight size={20} className="group-hover:translate-x-1 transition-transform" />
             </Link>
           </div>
 
-          {dokumentasi.length > 0 ? (
-            <div className="grid md:grid-cols-3 gap-8">
-              {dokumentasi.map((item) => (
-                <div
-                  key={item.id}
-                  className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-2"
-                >
-                  {item.foto_url ? (
-                    <div className="relative h-56 bg-gray-200">
+          <div className="grid md:grid-cols-3 gap-8">
+            {dokumentasi.length > 0 ? (
+              dokumentasi.map((item) => (
+                <div key={item.id} className="bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 group">
+                  <div className="relative h-60 overflow-hidden">
+                    {item.foto_url ? (
                       <Image
                         src={item.foto_url}
                         alt={item.judul}
                         fill
-                        className="object-cover"
+                        className="object-cover group-hover:scale-110 transition-transform duration-500"
                       />
-                    </div>
-                  ) : (
-                    <div className="h-56 bg-gradient-to-br from-green-400 to-green-600 flex items-center justify-center">
-                      <Calendar size={64} className="text-white/50" />
-                    </div>
-                  )}
-                  <div className="p-6">
-                    <div className="flex items-center text-sm text-gray-500 mb-3">
-                      <Calendar size={16} className="mr-2" />
-                      {new Date(item.tanggal).toLocaleDateString("id-ID", {
-                        day: "numeric",
-                        month: "long",
-                        year: "numeric",
-                      })}
-                    </div>
-                    {item.kategori && (
-                      <span className="inline-block bg-green-100 text-green-700 text-xs px-3 py-1 rounded-full mb-3">
-                        {item.kategori}
-                      </span>
+                    ) : (
+                      <div className="w-full h-full bg-gray-200 flex items-center justify-center"><Calendar className="text-gray-400" /></div>
                     )}
-                    <h3 className="font-bold text-xl mb-3 text-gray-800 line-clamp-2">
+                    <div className="absolute top-4 left-4 bg-white/90 backdrop-blur px-3 py-1 rounded-full text-xs font-bold text-gray-700">
+                      {new Date(item.tanggal).toLocaleDateString("id-ID", { day: 'numeric', month: 'long', year: 'numeric' })}
+                    </div>
+                  </div>
+                  <div className="p-6">
+                    <span className="text-green-600 text-xs font-bold uppercase tracking-wide">{item.kategori || 'Berita'}</span>
+                    <h3 className="font-bold text-xl text-gray-800 mt-2 mb-3 line-clamp-2 group-hover:text-green-700 transition-colors">
                       {item.judul}
                     </h3>
-                    <p className="text-gray-600 text-sm line-clamp-3">
+                    <p className="text-gray-600 text-sm line-clamp-3 leading-relaxed">
                       {item.deskripsi}
                     </p>
                   </div>
                 </div>
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-12 text-gray-500">
-              <Calendar size={64} className="mx-auto mb-4 text-gray-300" />
-              <p>Belum ada dokumentasi kegiatan</p>
-            </div>
-          )}
+              ))
+            ) : (
+                <div className="col-span-3 text-center py-12 text-gray-500 bg-white rounded-xl border border-dashed border-gray-300">
+                    <p>Belum ada dokumentasi terbaru.</p>
+                </div>
+            )}
+          </div>
         </div>
       </section>
 
-      {/* Potensi Desa */}
-      <section className="py-16 bg-gray-50">
+      {/* 5. POTENSI & UMKM HIGHLIGHT */}
+      <section className="py-20">
         <div className="max-w-7xl mx-auto px-4">
-          <div className="flex justify-between items-center mb-10">
-            <div>
-              <h2 className="text-3xl md:text-4xl font-bold text-gray-800">
-                Potensi Desa
-              </h2>
-              <p className="text-gray-600 mt-2">
-                Kekayaan dan potensi unggulan desa
-              </p>
-            </div>
-            <Link
-              href="/potensi"
-              className="text-green-600 hover:text-green-700 font-semibold flex items-center gap-2"
-            >
-              Lihat Semua →
-            </Link>
-          </div>
-
-          {potensi.length > 0 ? (
-            <div className="grid md:grid-cols-3 gap-8">
-              {potensi.map((item) => (
-                <div
-                  key={item.id}
-                  className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-2"
-                >
-                  {item.foto_url ? (
-                    <div className="relative h-56 bg-gray-200">
-                      <Image
-                        src={item.foto_url}
-                        alt={item.nama}
-                        fill
-                        className="object-cover"
-                      />
-                    </div>
-                  ) : (
-                    <div className="h-56 bg-gradient-to-br from-blue-400 to-purple-600 flex items-center justify-center">
-                      <MapPin size={64} className="text-white/50" />
-                    </div>
-                  )}
-                  <div className="p-6">
-                    {item.kategori && (
-                      <span className="inline-block bg-blue-100 text-blue-700 text-xs px-3 py-1 rounded-full mb-3">
-                        {item.kategori}
-                      </span>
-                    )}
-                    <h3 className="font-bold text-xl mb-3 text-gray-800">
-                      {item.nama}
-                    </h3>
-                    <p className="text-gray-600 text-sm line-clamp-3 mb-4">
-                      {item.deskripsi}
+            <div className="bg-green-900 rounded-3xl p-8 md:p-16 text-white text-center relative overflow-hidden">
+                <div className="absolute inset-0 opacity-10 bg-[url('https://www.transparenttextures.com/patterns/diagmonds-light.png')]"></div>
+                
+                <div className="relative z-10 max-w-3xl mx-auto">
+                    <h2 className="text-3xl md:text-4xl font-bold mb-6">Potensi & Ekonomi Desa</h2>
+                    <p className="text-green-100 text-lg mb-10 leading-relaxed">
+                        Desa Citamiang memiliki kekayaan alam yang melimpah dan warga yang kreatif. 
+                        Jelajahi potensi wisata alam dan dukung produk UMKM lokal kami.
                     </p>
-                    {item.lokasi && (
-                      <div className="flex items-center text-sm text-gray-500">
-                        <MapPin size={16} className="mr-2" />
-                        {item.lokasi}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-12 text-gray-500">
-              <MapPin size={64} className="mx-auto mb-4 text-gray-300" />
-              <p>Belum ada data potensi desa</p>
-            </div>
-          )}
-        </div>
-      </section>
-
-      {/* UMKM */}
-      <section className="py-16 bg-white">
-        <div className="max-w-7xl mx-auto px-4">
-          <div className="flex justify-between items-center mb-10">
-            <div>
-              <h2 className="text-3xl md:text-4xl font-bold text-gray-800">
-                UMKM Desa
-              </h2>
-              <p className="text-gray-600 mt-2">
-                Produk lokal unggulan dari masyarakat
-              </p>
-            </div>
-            <Link
-              href="/umkm"
-              className="text-green-600 hover:text-green-700 font-semibold flex items-center gap-2"
-            >
-              Lihat Semua →
-            </Link>
-          </div>
-
-          {umkm.length > 0 ? (
-            <div className="grid md:grid-cols-3 gap-8">
-              {umkm.map((item) => (
-                <div
-                  key={item.id}
-                  className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-2"
-                >
-                  {item.foto_url ? (
-                    <div className="relative h-56 bg-gray-200">
-                      <Image
-                        src={item.foto_url}
-                        alt={item.nama_umkm}
-                        fill
-                        className="object-cover"
-                      />
+                    
+                    <div className="flex flex-col sm:flex-row justify-center gap-4">
+                        <Link href="/potensi" className="bg-white text-green-900 px-8 py-4 rounded-xl font-bold hover:bg-green-50 transition flex items-center justify-center gap-2">
+                            <MapPin size={20} /> Jelajahi Potensi
+                        </Link>
+                        <Link href="/umkm" className="bg-green-800 text-white border border-green-700 px-8 py-4 rounded-xl font-bold hover:bg-green-700 transition flex items-center justify-center gap-2">
+                            <Store size={20} /> Lihat Produk UMKM
+                        </Link>
                     </div>
-                  ) : (
-                    <div className="h-56 bg-gradient-to-br from-orange-400 to-red-600 flex items-center justify-center">
-                      <Store size={64} className="text-white/50" />
-                    </div>
-                  )}
-                  <div className="p-6">
-                    {item.kategori && (
-                      <span className="inline-block bg-orange-100 text-orange-700 text-xs px-3 py-1 rounded-full mb-3">
-                        {item.kategori}
-                      </span>
-                    )}
-                    <h3 className="font-bold text-xl mb-2 text-gray-800">
-                      {item.nama_umkm}
-                    </h3>
-                    {item.pemilik && (
-                      <p className="text-sm text-gray-500 mb-3">
-                        Pemilik: {item.pemilik}
-                      </p>
-                    )}
-                    <p className="text-gray-600 text-sm line-clamp-3 mb-4">
-                      {item.deskripsi}
-                    </p>
-                    {item.kontak && (
-                      <a
-                        href={`tel:${item.kontak}`}
-                        className="text-green-600 hover:text-green-700 text-sm font-semibold"
-                      >
-                        Hubungi →
-                      </a>
-                    )}
-                  </div>
                 </div>
-              ))}
             </div>
-          ) : (
-            <div className="text-center py-12 text-gray-500">
-              <Store size={64} className="mx-auto mb-4 text-gray-300" />
-              <p>Belum ada data UMKM</p>
-            </div>
-          )}
-        </div>
-      </section>
-
-      {/* Call to Action */}
-      <section className="py-16 bg-gradient-to-r from-green-600 to-green-800 text-white">
-        <div className="max-w-4xl mx-auto px-4 text-center">
-          <h2 className="text-3xl md:text-4xl font-bold mb-6">
-            Ingin Tahu Lebih Banyak?
-          </h2>
-          <p className="text-xl mb-8 text-green-50">
-            Jelajahi lebih dalam tentang desa kami, program-program, dan cara
-            berkontribusi
-          </p>
-          <div className="flex flex-wrap gap-4 justify-center">
-            <Link
-              href="/tentang"
-              className="bg-white text-green-700 px-8 py-4 rounded-full font-semibold hover:bg-green-50 transition shadow-lg"
-            >
-              Tentang Desa
-            </Link>
-            <Link
-              href="/perangkat"
-              className="bg-green-700 text-white px-8 py-4 rounded-full font-semibold hover:bg-green-800 transition shadow-lg border-2 border-white"
-            >
-              Kontak Kami
-            </Link>
-          </div>
         </div>
       </section>
     </main>
