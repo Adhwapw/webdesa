@@ -3,9 +3,16 @@ import { Inter } from 'next/font/google'
 import './globals.css'
 import Navbar from '@/components/Navbar'
 import Footer from '@/components/Footer'
+import { supabase } from '@/lib/supabase' // Import supabase
+import { ProfilDesa } from '@/types'
 
 const inter = Inter({ subsets: ['latin'] })
 
+// Fungsi ambil data profil
+async function getProfilDesa() {
+  const { data } = await supabase.from('profil_desa').select('*').single()
+  return data as ProfilDesa | null
+}
 export const metadata: Metadata = {
   metadataBase: new URL('https://desacitamiang.vercel.app'), // Ganti dengan domain aslimu nanti
   title: {
@@ -32,17 +39,23 @@ export const metadata: Metadata = {
   }
 }
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
+  const profil = await getProfilDesa() // Fetch di Server Component
+
   return (
     <html lang="id">
       <body className={inter.className}>
-        <Navbar />
+        {/* Lempar data ke Navbar */}
+        <Navbar namaDesa={profil?.nama_desa} />
+        
         {children}
-        <Footer />
+        
+        {/* Lempar data ke Footer */}
+        <Footer profil={profil} />
       </body>
     </html>
   )

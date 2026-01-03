@@ -56,3 +56,16 @@ export interface Banner {
   status: string;
   created_at?: string;
 }
+
+export interface ProfilDesa {
+  id: number;
+  nama_desa: string;
+  alamat_lengkap: string;
+  telepon: string;
+  email: string;
+  sejarah: string;
+  visi: string;
+  misi: string;
+  latitude?: string;
+  longitude?: string;
+}
