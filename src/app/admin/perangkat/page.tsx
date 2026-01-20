@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase'
 import { PerangkatDesa } from '@/types'
 import { Loader2, Plus, Trash2, User, Briefcase, ListOrdered, Image as ImageIcon, UploadCloud, X } from 'lucide-react'
 import Image from 'next/image'
+import toast from 'react-hot-toast'
 
 export default function AdminPerangkatPage() {
   const [data, setData] = useState<PerangkatDesa[]>([])
@@ -12,7 +13,6 @@ export default function AdminPerangkatPage() {
   const [uploading, setUploading] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
 
-  // Form State
   const [nama, setNama] = useState('')
   const [jabatan, setJabatan] = useState('')
   const [urutan, setUrutan] = useState('1')
@@ -33,13 +33,12 @@ export default function AdminPerangkatPage() {
       
       if (data) setData(data as PerangkatDesa[])
     } catch (error) {
-      console.error('Error fetching data:', error)
+      toast.error('Gagal memuat data perangkat')
     } finally {
       setLoading(false)
     }
   }
 
-  // --- DRAG & DROP ---
   const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); setIsDragging(true) }
   const handleDragLeave = (e: React.DragEvent) => { e.preventDefault(); setIsDragging(false) }
   const handleDrop = (e: React.DragEvent) => {
@@ -47,20 +46,33 @@ export default function AdminPerangkatPage() {
     if (e.dataTransfer.files?.[0]) {
       const f = e.dataTransfer.files[0]
       if (f.type.startsWith('image/')) setFile(f)
-      else alert('Hanya file gambar!')
+      else toast.error('Hanya file gambar!')
     }
   }
   const removeFile = () => {
     setFile(null)
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
-  // ------------------
 
   const handleUpload = async (e: FormEvent) => {
     e.preventDefault()
-    if (!file) return alert('Pilih foto profil terlebih dahulu')
+    
+    if (!file) return toast.error('Pilih foto profil terlebih dahulu')
+
+    // --- UBAH LIMIT 5MB ---
+    if (file.size > 5 * 1024 * 1024) {
+        toast.error('Foto profil terlalu besar (Max 5MB).')
+        return
+    }
+
+    if (!file.type.startsWith('image/')) {
+        toast.error('File harus berupa gambar (JPG/PNG).')
+        return
+    }
 
     setUploading(true)
+    const toastId = toast.loading('Menyimpan data...')
+
     try {
       const fileExt = file.name.split('.').pop()
       const fileName = `${Date.now()}.${fileExt}`
@@ -88,15 +100,17 @@ export default function AdminPerangkatPage() {
 
       if (dbError) throw dbError
 
-      // Reset Form
       setNama(''); setJabatan(''); setUrutan(prev => (parseInt(prev) + 1).toString());
       removeFile();
       fetchData();
-      alert('Perangkat desa berhasil ditambahkan!')
+      
+      toast.dismiss(toastId)
+      toast.success('Perangkat desa berhasil ditambahkan!')
 
     } catch (error) {
       console.error('Error:', error)
-      alert('Gagal upload. Pastikan bucket "perangkat_desa" sudah dibuat.')
+      toast.dismiss(toastId)
+      toast.error('Gagal menyimpan data.')
     } finally {
       setUploading(false)
     }
@@ -107,8 +121,9 @@ export default function AdminPerangkatPage() {
     try {
       await supabase.from('perangkat_desa').delete().eq('id', id)
       fetchData()
+      toast.success('Data dihapus')
     } catch (error) {
-      console.error('Error deleting:', error)
+      toast.error('Gagal menghapus data')
     }
   }
 
@@ -117,12 +132,12 @@ export default function AdminPerangkatPage() {
     try {
       await supabase.from('perangkat_desa').update({ status: newStatus }).eq('id', id)
       fetchData()
+      toast.success('Status diubah')
     } catch (error) {
-      console.error('Error updating status:', error)
+      toast.error('Error updating status')
     }
   }
 
-  // REUSABLE STYLES (Agar konsisten & mudah dibaca)
   const labelClass = "block text-sm font-bold text-black mb-2"
   const inputContainerClass = "relative"
   const iconClass = "absolute left-3 top-3 text-gray-600"
@@ -189,7 +204,7 @@ export default function AdminPerangkatPage() {
 
           <div className="space-y-5">
             <div>
-              <label className={labelClass}>Foto Profil</label>
+              <label className="block text-sm font-bold text-black mb-2">Foto Profil</label>
               {!file ? (
                 <div 
                   onDragOver={handleDragOver}
@@ -203,6 +218,7 @@ export default function AdminPerangkatPage() {
                   <input type="file" accept="image/*" ref={fileInputRef} onChange={e => setFile(e.target.files?.[0] || null)} className="hidden" />
                   <UploadCloud className="mx-auto text-gray-500 mb-2" size={32} />
                   <p className="text-sm text-gray-700 font-medium">Klik atau Drag foto kesini</p>
+                  <p className="text-xs text-red-500 mt-1">*Max 5MB</p>
                 </div>
               ) : (
                 <div className="flex items-center gap-3 p-3 bg-white border border-gray-300 rounded-lg shadow-sm">
@@ -216,16 +232,15 @@ export default function AdminPerangkatPage() {
             <button 
               disabled={uploading}
               type="submit" 
-              className="w-full bg-green-700 text-white px-4 py-3 rounded-lg hover:bg-green-800 flex items-center justify-center gap-2 font-bold mt-2 shadow-md transition-transform active:scale-95"
+              className={`w-full bg-green-700 text-white px-4 py-3 rounded-lg hover:bg-green-800 flex items-center justify-center gap-2 font-bold mt-2 shadow-md transition-transform active:scale-95 ${uploading ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
               {uploading ? <Loader2 className="animate-spin" /> : <Plus size={20} />}
-              Simpan Anggota
+              {uploading ? 'Menyimpan...' : 'Simpan Anggota'}
             </button>
           </div>
         </form>
       </div>
 
-      {/* List Perangkat */}
       <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
         {data.map((item) => (
           <div key={item.id} className={`bg-white rounded-xl shadow-md overflow-hidden border flex flex-col items-center p-6 transition-all hover:-translate-y-1 ${item.status === 'aktif' ? 'border-gray-200' : 'border-gray-200 opacity-75 bg-gray-50'}`}>

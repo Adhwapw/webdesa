@@ -1,314 +1,220 @@
 'use client'
 
-import { useState, useEffect, FormEvent, useRef } from 'react'
+import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { UMKM } from '@/types'
-import { Loader2, Plus, Trash2, Store, User, Phone, Image as ImageIcon, UploadCloud, X, Tag } from 'lucide-react'
-import Image from 'next/image'
-import TextEditor from '@/components/TextEditor'
+import { 
+  Camera, MapPin, Store, Users, Loader2, 
+  Image as ImageIcon, Building, Calendar, ArrowRight, PlusCircle 
+} from 'lucide-react'
+import Link from 'next/link'
 
-export default function AdminUMKMPage() {
-    const [data, setData] = useState<UMKM[]>([])
-    const [loading, setLoading] = useState(true)
-    const [uploading, setUploading] = useState(false)
-    const [isDragging, setIsDragging] = useState(false)
+interface DashboardStats {
+  dokumentasi: number;
+  potensi: number;
+  umkm: number;
+  perangkat: number;
+  banner_aktif: number;
+}
 
-    // Form State
-    const [namaUmkm, setNamaUmkm] = useState('')
-    const [pemilik, setPemilik] = useState('')
-    const [kontak, setKontak] = useState('')
-    const [kategori, setKategori] = useState('Makanan')
-    const [deskripsi, setDeskripsi] = useState('')
-    const [file, setFile] = useState<File | null>(null)
+interface RecentActivity {
+  id: number;
+  judul: string;
+  tanggal: string;
+  kategori: string;
+}
 
-    const fileInputRef = useRef<HTMLInputElement>(null)
+interface VillageProfile {
+  nama_desa: string;
+  alamat_lengkap: string;
+}
 
-    useEffect(() => {
-        fetchData()
-    }, [])
+export default function AdminDashboard() {
+  const [stats, setStats] = useState<DashboardStats>({
+    dokumentasi: 0, potensi: 0, umkm: 0, perangkat: 0, banner_aktif: 0
+  })
+  const [recentDocs, setRecentDocs] = useState<RecentActivity[]>([])
+  const [profile, setProfile] = useState<VillageProfile | null>(null)
+  const [loading, setLoading] = useState(true)
 
-    const fetchData = async () => {
-        try {
-            const { data, error } = await supabase
-                .from('umkm')
-                .select('*')
-                .order('id', { ascending: false })
+  // Format Tanggal Hari Ini
+  const today = new Date().toLocaleDateString('id-ID', {
+    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+  })
 
-            if (data) setData(data as UMKM[])
-        } catch (error) {
-            console.error('Error fetching data:', error)
-        } finally {
-            setLoading(false)
-        }
+  useEffect(() => {
+    async function fetchDashboardData() {
+      try {
+        // 1. Ambil Statistik Angka
+        const [doc, pot, umkm, per, ban] = await Promise.all([
+          supabase.from('dokumentasi').select('id', { count: 'exact', head: true }),
+          supabase.from('potensi').select('id', { count: 'exact', head: true }),
+          supabase.from('umkm').select('id', { count: 'exact', head: true }),
+          supabase.from('perangkat_desa').select('id', { count: 'exact', head: true }),
+          supabase.from('banners').select('id', { count: 'exact', head: true }).eq('status', 'aktif')
+        ])
+
+        // 2. Ambil 5 Kegiatan Terbaru
+        const { data: recentData } = await supabase
+          .from('dokumentasi')
+          .select('id, judul, tanggal, kategori')
+          .order('tanggal', { ascending: false })
+          .limit(5)
+
+        // 3. Ambil Profil Desa Ringkas
+        const { data: profilData } = await supabase
+          .from('profil_desa')
+          .select('nama_desa, alamat_lengkap')
+          .single()
+
+        setStats({
+          dokumentasi: doc.count || 0,
+          potensi: pot.count || 0,
+          umkm: umkm.count || 0,
+          perangkat: per.count || 0,
+          banner_aktif: ban.count || 0
+        })
+
+        if (recentData) setRecentDocs(recentData)
+        if (profilData) setProfile(profilData)
+
+      } catch (error) {
+        console.error('Error fetching dashboard:', error)
+      } finally {
+        setLoading(false)
+      }
     }
 
-    // --- DRAG & DROP ---
-    const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); setIsDragging(true) }
-    const handleDragLeave = (e: React.DragEvent) => { e.preventDefault(); setIsDragging(false) }
-    const handleDrop = (e: React.DragEvent) => {
-        e.preventDefault(); setIsDragging(false)
-        if (e.dataTransfer.files?.[0]) {
-            const f = e.dataTransfer.files[0]
-            if (f.type.startsWith('image/')) setFile(f)
-            else alert('Hanya file gambar!')
-        }
-    }
-    const removeFile = () => {
-        setFile(null)
-        if (fileInputRef.current) fileInputRef.current.value = ''
-    }
+    fetchDashboardData()
+  }, [])
 
-    // --- HANDLE UPLOAD DENGAN VALIDASI ---
-    const handleUpload = async (e: FormEvent) => {
-        e.preventDefault()
+  const statCards = [
+    { title: 'Berita & Kegiatan', count: stats.dokumentasi, icon: Camera, color: 'bg-blue-600', link: '/admin/dokumentasi' },
+    { title: 'Potensi Desa', count: stats.potensi, icon: MapPin, color: 'bg-purple-600', link: '/admin/potensi' },
+    { title: 'UMKM Terdaftar', count: stats.umkm, icon: Store, color: 'bg-orange-600', link: '/admin/umkm' },
+    { title: 'Perangkat Desa', count: stats.perangkat, icon: Users, color: 'bg-green-600', link: '/admin/perangkat' },
+  ]
 
-        // 1. Validasi File
-        if (!file) return alert('Pilih foto produk terlebih dahulu')
-
-        // 2. Validasi Ukuran (Max 2MB)
-        if (file.size > 2 * 1024 * 1024) {
-             alert('Foto produk terlalu besar (Max 2MB). Mohon kompres dulu agar loading cepat.')
-             return
-        }
-
-        // 3. Validasi Tipe
-        if (!file.type.startsWith('image/')) {
-             alert('File harus berupa gambar.')
-             return
-        }
-
-        setUploading(true)
-        try {
-            const fileExt = file.name.split('.').pop()
-            const fileName = `${Date.now()}.${fileExt}`
-            const filePath = `${fileName}`
-
-            const { error: uploadError } = await supabase.storage
-                .from('umkm') 
-                .upload(filePath, file)
-
-            if (uploadError) throw uploadError
-
-            const { data: { publicUrl } } = supabase.storage
-                .from('umkm')
-                .getPublicUrl(filePath)
-
-            const { error: dbError } = await supabase
-                .from('umkm')
-                .insert([{
-                    nama_umkm: namaUmkm,
-                    pemilik,
-                    kontak,
-                    kategori,
-                    deskripsi,
-                    foto_url: publicUrl,
-                    status: 'aktif'
-                }])
-
-            if (dbError) throw dbError
-
-            // Reset Form
-            setNamaUmkm(''); setPemilik(''); setKontak(''); setDeskripsi('');
-            removeFile();
-            fetchData();
-            alert('UMKM berhasil ditambahkan!')
-
-        } catch (error) {
-            console.error('Error:', error)
-            alert('Gagal upload. Pastikan koneksi internet stabil.')
-        } finally {
-            setUploading(false)
-        }
-    }
-
-    const handleDelete = async (id: number) => {
-        if (!confirm('Hapus data UMKM ini?')) return
-        try {
-            await supabase.from('umkm').delete().eq('id', id)
-            fetchData()
-        } catch (error) {
-            console.error('Error deleting:', error)
-        }
-    }
-
-    const toggleStatus = async (id: number, currentStatus: string) => {
-        const newStatus = currentStatus === 'aktif' ? 'non-aktif' : 'aktif'
-        try {
-            await supabase.from('umkm').update({ status: newStatus }).eq('id', id)
-            fetchData()
-        } catch (error) {
-            console.error('Error updating status:', error)
-        }
-    }
-
+  if (loading) {
     return (
-        <div>
-            <h1 className="text-2xl font-bold text-yellow-800 mb-6">Kelola UMKM Desa</h1>
-
-            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 mb-8">
-                <h2 className="text-lg font-semibold mb-4 flex items-center gap-2 text-yellow-900">
-                    <Plus size={20} /> Tambah UMKM Baru
-                </h2>
-
-                <form onSubmit={handleUpload} className="grid md:grid-cols-2 gap-6">
-                    <div className="space-y-4">
-                        <div>
-                            <label className="block text-sm font-medium text-black mb-1">Nama Usaha/Produk</label>
-                            <div className="relative">
-                                <Store className="absolute left-3 top-3 text-black" size={18} />
-                                <input
-                                    type="text"
-                                    value={namaUmkm}
-                                    onChange={e => setNamaUmkm(e.target.value)}
-                                    className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-orange-500 outline-none text-black"
-                                    placeholder="Contoh: Keripik Singkong Barokah"
-                                    required
-                                />
-                            </div>
-                        </div>
-
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Nama Pemilik</label>
-                            <div className="relative">
-                                <User className="absolute left-3 top-3 text-gray-400" size={18} />
-                                <input
-                                    type="text"
-                                    value={pemilik}
-                                    onChange={e => setPemilik(e.target.value)}
-                                    className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-orange-500 outline-none text-black"
-                                    placeholder="Nama pemilik usaha"
-                                    required
-                                />
-                            </div>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-4">
-                            <div>
-                                <label className="block text-sm font-medium text-black mb-1">No. WhatsApp</label>
-                                <div className="relative">
-                                    <Phone className="absolute left-3 top-3 text-gray-400" size={18} />
-                                    <input
-                                        type="text"
-                                        value={kontak}
-                                        onChange={e => setKontak(e.target.value)}
-                                        className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-orange-500 outline-none text-black"
-                                        placeholder="0812xxxx"
-                                        required
-                                    />
-                                </div>
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-black mb-1">Kategori</label>
-                                <div className="relative">
-                                    <Tag className="absolute left-3 top-3 text-black" size={18} />
-                                    <select
-                                        value={kategori}
-                                        onChange={e => setKategori(e.target.value)}
-                                        className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-orange-500 outline-none bg-white appearance-none text-black"
-                                    >
-                                        <option value="Makanan">Makanan</option>
-                                        <option value="Minuman">Minuman</option>
-                                        <option value="Kerajinan">Kerajinan</option>
-                                        <option value="Jasa">Jasa</option>
-                                        <option value="Lainnya">Lainnya</option>
-                                    </select>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="space-y-4">
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Foto Produk</label>
-                            {!file ? (
-                                <div
-                                    onDragOver={handleDragOver}
-                                    onDragLeave={handleDragLeave}
-                                    onDrop={handleDrop}
-                                    onClick={() => fileInputRef.current?.click()}
-                                    className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-all ${isDragging ? 'border-orange-500 bg-orange-50' : 'border-gray-300 hover:bg-gray-50'
-                                        }`}
-                                >
-                                    <input type="file" accept="image/*" ref={fileInputRef} onChange={e => setFile(e.target.files?.[0] || null)} className="hidden" />
-                                    <UploadCloud className="mx-auto text-gray-400 mb-2" size={32} />
-                                    <p className="text-sm text-gray-600">Klik atau Drag foto kesini</p>
-                                    <p className="text-xs text-red-500 mt-1">*Max 2MB</p>
-                                </div>
-                            ) : (
-                                <div className="flex items-center gap-3 p-3 bg-orange-50 border border-orange-200 rounded-lg">
-                                    <ImageIcon className="text-orange-600" />
-                                    <span className="text-sm truncate flex-1">{file.name}</span>
-                                    <button type="button" onClick={removeFile}><X size={18} className="text-red-500" /></button>
-                                </div>
-                            )}
-                        </div>
-
-                        <div className="col-span-1 md:col-span-2 space-y-2">
-                            <label className="block text-sm font-bold text-black">Deskripsi Produk & Usaha</label>
-                            <TextEditor
-                                value={deskripsi}
-                                onChange={setDeskripsi}
-                            />
-                        </div>
-
-                        <button
-                            disabled={uploading}
-                            type="submit"
-                            className={`w-full bg-orange-600 text-white px-4 py-2.5 rounded-lg hover:bg-orange-700 flex items-center justify-center gap-2 font-medium ${uploading ? 'opacity-50 cursor-not-allowed' : ''}`}
-                        >
-                            {uploading ? <Loader2 className="animate-spin" /> : <Plus size={18} />}
-                            {uploading ? 'Menyimpan...' : 'Simpan UMKM'}
-                        </button>
-                    </div>
-                </form>
-            </div>
-
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {data.map((item) => (
-                    <div key={item.id} className={`bg-white rounded-xl shadow-sm overflow-hidden border-2 ${item.status === 'aktif' ? 'border-transparent' : 'border-gray-200 opacity-75'}`}>
-                        <div className="relative h-48 bg-gray-100">
-                            {item.foto_url ? (
-                                <Image src={item.foto_url} alt={item.nama_umkm} fill className="object-cover" />
-                            ) : <div className="h-full flex items-center justify-center"><ImageIcon className="text-gray-400" /></div>}
-
-                            <div className="absolute top-2 right-2 flex gap-2">
-                                <span className={`px-2 py-1 rounded text-xs font-bold text-white shadow-sm ${item.status === 'aktif' ? 'bg-green-500' : 'bg-gray-500'}`}>
-                                    {item.status === 'aktif' ? 'Aktif' : 'Non-Aktif'}
-                                </span>
-                            </div>
-                        </div>
-
-                        <div className="p-4">
-                            <div className="flex justify-between items-start mb-2">
-                                <h3 className="font-bold text-gray-800 line-clamp-1">{item.nama_umkm}</h3>
-                                <span className="text-xs bg-orange-100 text-orange-800 px-2 py-0.5 rounded-full">{item.kategori}</span>
-                            </div>
-                            <div className="flex items-center text-xs text-gray-500 mb-1">
-                                <User size={12} className="mr-1" /> {item.pemilik}
-                            </div>
-                            <div className="flex items-center text-xs text-gray-500 mb-3">
-                                <Phone size={12} className="mr-1" /> {item.kontak}
-                            </div>
-
-                            <div className="pt-3 border-t flex justify-between items-center">
-                                <button
-                                    onClick={() => toggleStatus(item.id, item.status)}
-                                    className={`text-xs font-semibold px-3 py-1.5 rounded-md transition-colors ${item.status === 'aktif' ? 'bg-red-50 text-red-600 hover:bg-red-100' : 'bg-green-50 text-green-600 hover:bg-green-100'}`}
-                                >
-                                    {item.status === 'aktif' ? 'Non-aktifkan' : 'Aktifkan'}
-                                </button>
-                                <button
-                                    onClick={() => handleDelete(item.id)}
-                                    className="text-gray-400 hover:text-red-500 p-1 transition-colors"
-                                    title="Hapus"
-                                >
-                                    <Trash2 size={18} />
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                ))}
-            </div>
-        </div>
+      <div className="flex h-[80vh] items-center justify-center flex-col gap-4">
+        <Loader2 className="animate-spin text-green-700" size={48} />
+        <p className="text-gray-500 font-medium">Memuat Dashboard...</p>
+      </div>
     )
+  }
+
+  return (
+    <div className="space-y-8">
+      {/* Header Section */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-xl border border-gray-100 shadow-sm">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-800">Selamat Datang, Admin! 👋</h1>
+          <p className="text-gray-500 mt-1">{today}</p>
+        </div>
+        
+        {/* Kartu Profil Desa Kecil */}
+        {profile && (
+          <div className="flex items-center gap-4 bg-green-50 px-5 py-3 rounded-lg border border-green-100">
+            <div className="bg-green-200 p-2 rounded-full text-green-700">
+              <Building size={24} />
+            </div>
+            <div>
+              <p className="text-xs text-green-600 font-bold uppercase tracking-wider">Sedang Mengelola</p>
+              <h3 className="text-green-900 font-bold text-lg">{profile.nama_desa}</h3>
+              <p className="text-green-700 text-xs truncate max-w-[200px]">{profile.alamat_lengkap}</p>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Statistik Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        {statCards.map((stat, index) => (
+          <Link key={index} href={stat.link} className="block group">
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 flex items-center hover:shadow-md hover:border-green-200 transition-all cursor-pointer h-full">
+              <div className={`${stat.color} p-4 rounded-xl text-white mr-4 shadow-md group-hover:scale-110 transition-transform`}>
+                <stat.icon size={28} />
+              </div>
+              <div>
+                <p className="text-gray-500 text-sm font-medium">{stat.title}</p>
+                <h3 className="text-3xl font-bold text-gray-800 mt-1">{stat.count}</h3>
+              </div>
+            </div>
+          </Link>
+        ))}
+      </div>
+
+      <div className="grid lg:grid-cols-3 gap-8">
+        {/* Kolom Kiri: Aktivitas Terbaru (Lebar 2 kolom) */}
+        <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+              <Calendar size={20} className="text-blue-600" /> 
+              Publikasi Terbaru
+            </h2>
+            <Link href="/admin/dokumentasi" className="text-sm text-blue-600 hover:underline flex items-center gap-1">
+              Lihat Semua <ArrowRight size={14} />
+            </Link>
+          </div>
+
+          <div className="space-y-4">
+            {recentDocs.length === 0 ? (
+              <p className="text-gray-400 text-center py-8">Belum ada kegiatan yang diupload.</p>
+            ) : (
+              recentDocs.map((doc) => (
+                <div key={doc.id} className="flex items-start gap-4 p-4 rounded-lg hover:bg-gray-50 border border-transparent hover:border-gray-100 transition-colors">
+                  <div className="bg-blue-100 text-blue-600 font-bold text-xs px-3 py-1 rounded-full mt-1 shrink-0">
+                    {doc.kategori}
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="text-gray-800 font-bold line-clamp-1">{doc.judul}</h4>
+                    <p className="text-gray-500 text-xs mt-1">
+                      {new Date(doc.tanggal).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
+                    </p>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        {/* Kolom Kanan: Status Lain & Quick Actions (Lebar 1 kolom) */}
+        <div className="space-y-6">
+          {/* Status Banner */}
+          <div className="bg-gradient-to-br from-green-800 to-green-900 rounded-xl shadow-md p-6 text-white relative overflow-hidden">
+            <div className="relative z-10">
+              <p className="text-green-200 text-sm font-medium mb-1">Banner Halaman Depan</p>
+              <div className="flex items-end gap-2">
+                <h3 className="text-4xl font-bold">{stats.banner_aktif}</h3>
+                <span className="text-green-200 text-sm mb-1.5">Sedang Aktif</span>
+              </div>
+              <Link href="/admin/banner" className="inline-block mt-4 bg-white/20 hover:bg-white/30 px-4 py-2 rounded-lg text-sm transition-colors backdrop-blur-sm">
+                Kelola Banner &rarr;
+              </Link>
+            </div>
+            <ImageIcon className="absolute -bottom-4 -right-4 text-white/10 w-32 h-32 rotate-12" />
+          </div>
+
+          {/* Quick Actions */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <h3 className="text-gray-800 font-bold mb-4">Pintasan Cepat</h3>
+            <div className="space-y-3">
+              <Link href="/admin/dokumentasi" className="flex items-center gap-3 p-3 rounded-lg border border-gray-200 hover:border-green-500 hover:bg-green-50 text-gray-600 hover:text-green-700 transition-all group">
+                <PlusCircle size={20} className="text-gray-400 group-hover:text-green-600" />
+                <span className="font-medium text-sm">Tambah Berita Baru</span>
+              </Link>
+              <Link href="/admin/umkm" className="flex items-center gap-3 p-3 rounded-lg border border-gray-200 hover:border-orange-500 hover:bg-orange-50 text-gray-600 hover:text-orange-700 transition-all group">
+                <PlusCircle size={20} className="text-gray-400 group-hover:text-orange-600" />
+                <span className="font-medium text-sm">Tambah Data UMKM</span>
+              </Link>
+              <Link href="/admin/pengaturan" className="flex items-center gap-3 p-3 rounded-lg border border-gray-200 hover:border-blue-500 hover:bg-blue-50 text-gray-600 hover:text-blue-700 transition-all group">
+                <Building size={20} className="text-gray-400 group-hover:text-blue-600" />
+                <span className="font-medium text-sm">Update Profil Desa</span>
+              </Link>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
 }

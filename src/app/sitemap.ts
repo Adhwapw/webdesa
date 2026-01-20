@@ -1,7 +1,7 @@
 import { MetadataRoute } from 'next'
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  const baseUrl = 'https://desacitamiang.vercel.app' // Ganti domain nanti
+  const baseUrl = 'https://desacitamiang.web.id'
 
   return [
     {

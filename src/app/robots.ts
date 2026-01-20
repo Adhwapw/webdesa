@@ -7,6 +7,6 @@ export default function robots(): MetadataRoute.Robots {
       allow: '/',
       disallow: '/admin/', // Jangan biarkan Google meng-index halaman admin
     },
-    sitemap: 'https://desacitamiang.vercel.app/sitemap.xml', // Ganti domain nanti
+    sitemap: 'https://desacitamiang.web.id/sitemap.xml',
   }
 }

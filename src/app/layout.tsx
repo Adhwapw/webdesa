@@ -3,8 +3,9 @@ import { Inter } from 'next/font/google'
 import './globals.css'
 import Navbar from '@/components/Navbar'
 import Footer from '@/components/Footer'
-import { supabase } from '@/lib/supabase' // Import supabase
+import { supabase } from '@/lib/supabase'
 import { ProfilDesa } from '@/types'
+import { Toaster } from 'react-hot-toast' // 1. Import Toaster
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -13,8 +14,9 @@ async function getProfilDesa() {
   const { data } = await supabase.from('profil_desa').select('*').single()
   return data as ProfilDesa | null
 }
+
 export const metadata: Metadata = {
-  metadataBase: new URL('https://desacitamiang.vercel.app'), // Ganti dengan domain aslimu nanti
+  metadataBase: new URL('https://desacitamiang.vercel.app'),
   title: {
     default: 'Desa Citamiang | Kecamatan Maniis Kabupaten Purwakarta',
     template: '%s | Desa Citamiang Purwakarta'
@@ -23,7 +25,7 @@ export const metadata: Metadata = {
   keywords: ['Desa Citamiang', 'Maniis', 'Purwakarta', 'Website Desa', 'Wisata Purwakarta', 'Taman Desa Citamiang'],
   authors: [{ name: 'Pemerintah Desa Citamiang' }],
   icons: {
-    icon: '/favicon.ico', // Pastikan punya favicon
+    icon: '/favicon.ico',
   },
   openGraph: {
     title: 'Desa Citamiang | Purwakarta',
@@ -49,6 +51,33 @@ export default async function RootLayout({
   return (
     <html lang="id">
       <body className={inter.className}>
+        {/* 2. Pasang Toaster di sini (di paling atas body) */}
+        <Toaster 
+          position="top-center" 
+          reverseOrder={false}
+          toastOptions={{
+            duration: 4000,
+            style: {
+              background: '#333',
+              color: '#fff',
+            },
+            success: {
+              style: {
+                background: '#ECFDF5', // Hijau muda
+                color: '#065F46',      // Hijau tua
+                border: '1px solid #34D399'
+              },
+            },
+            error: {
+              style: {
+                background: '#FEF2F2', // Merah muda
+                color: '#991B1B',      // Merah tua
+                border: '1px solid #F87171'
+              },
+            },
+          }}
+        />
+
         {/* Lempar data ke Navbar */}
         <Navbar namaDesa={profil?.nama_desa} />
         
