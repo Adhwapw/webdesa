@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabase'
 import { Dokumentasi } from '@/types'
 import { Loader2, Plus, Trash2, Calendar, Type, Image as ImageIcon, UploadCloud, X, Tag } from 'lucide-react'
 import Image from 'next/image'
-import TextEditor from '@/components/TextEditor' // Import TextEditor
+import TextEditor from '@/components/TextEditor'
 
 export default function AdminDokumentasiPage() {
   const [data, setData] = useState<Dokumentasi[]>([])
@@ -17,7 +17,7 @@ export default function AdminDokumentasiPage() {
   const [judul, setJudul] = useState('')
   const [tanggal, setTanggal] = useState('')
   const [kategori, setKategori] = useState('Kegiatan')
-  const [deskripsi, setDeskripsi] = useState('') // Ini nanti berisi HTML dari TextEditor
+  const [deskripsi, setDeskripsi] = useState('')
   const [file, setFile] = useState<File | null>(null)
   
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -56,11 +56,25 @@ export default function AdminDokumentasiPage() {
     setFile(null)
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
-  // -------------------------
 
+  // --- HANDLE UPLOAD DENGAN VALIDASI ---
   const handleUpload = async (e: FormEvent) => {
     e.preventDefault()
+
+    // 1. Validasi File Ada
     if (!file) return alert('Pilih foto kegiatan terlebih dahulu')
+
+    // 2. Validasi Ukuran (Max 2MB)
+    if (file.size > 2 * 1024 * 1024) {
+        alert('Ukuran file terlalu besar! Maksimal 2MB. Mohon kompres foto terlebih dahulu.')
+        return
+    }
+
+    // 3. Validasi Tipe
+    if (!file.type.startsWith('image/')) {
+        alert('File harus berupa gambar.')
+        return
+    }
 
     setUploading(true)
     try {
@@ -68,7 +82,7 @@ export default function AdminDokumentasiPage() {
       const fileName = `${Date.now()}.${fileExt}`
       const filePath = `${fileName}`
 
-      // 1. Upload ke Storage
+      // Upload ke Storage
       const { error: uploadError } = await supabase.storage
         .from('dokumentasi')
         .upload(filePath, file)
@@ -79,14 +93,14 @@ export default function AdminDokumentasiPage() {
         .from('dokumentasi')
         .getPublicUrl(filePath)
 
-      // 2. Simpan ke Database
+      // Simpan ke Database
       const { error: dbError } = await supabase
         .from('dokumentasi')
         .insert([{
           judul,
           tanggal,
           kategori,
-          deskripsi, // Isi HTML dari TextEditor
+          deskripsi,
           foto_url: publicUrl,
           status: 'aktif'
         }])
@@ -96,7 +110,7 @@ export default function AdminDokumentasiPage() {
       // Reset Form
       setJudul('')
       setTanggal('')
-      setDeskripsi('') // Reset editor
+      setDeskripsi('')
       removeFile()
       fetchData()
       alert('Kegiatan berhasil ditambahkan!')
@@ -119,7 +133,6 @@ export default function AdminDokumentasiPage() {
     }
   }
 
-  // Styles untuk Input (Agar konsisten)
   const labelClass = "block text-sm font-bold text-black mb-2"
   const inputContainerClass = "relative"
   const iconClass = "absolute left-3 top-3 text-gray-600"
@@ -137,7 +150,6 @@ export default function AdminDokumentasiPage() {
         
         <form onSubmit={handleUpload} className="grid md:grid-cols-2 gap-8">
           
-          {/* Kolom Kiri: Data Dasar */}
           <div className="space-y-5">
             <div>
               <label className={labelClass}>Judul Kegiatan</label>
@@ -201,6 +213,7 @@ export default function AdminDokumentasiPage() {
                   <input type="file" accept="image/*" ref={fileInputRef} onChange={e => setFile(e.target.files?.[0] || null)} className="hidden" />
                   <UploadCloud className="mx-auto text-gray-500 mb-2" size={32} />
                   <p className="text-sm text-gray-700 font-medium">Klik atau Drag foto kesini</p>
+                  <p className="text-xs text-red-500 mt-1 font-bold">*Maksimal 2MB</p>
                 </div>
               ) : (
                 <div className="flex items-center gap-3 p-3 bg-white border border-gray-300 rounded-lg shadow-sm">
@@ -212,7 +225,6 @@ export default function AdminDokumentasiPage() {
             </div>
           </div>
 
-          {/* Kolom Kanan: Editor Artikel */}
           <div className="flex flex-col h-full">
              <label className={labelClass}>Isi Artikel / Deskripsi Lengkap</label>
              <div className="flex-1">
@@ -222,20 +234,18 @@ export default function AdminDokumentasiPage() {
                  />
              </div>
              
-             {/* Tombol Simpan ditaruh di bawah editor */}
              <button 
               disabled={uploading}
               type="submit" 
-              className="w-full bg-green-700 text-white px-4 py-3 rounded-lg hover:bg-green-800 flex items-center justify-center gap-2 font-bold mt-4 shadow-md transition-transform active:scale-95"
+              className={`w-full bg-green-700 text-white px-4 py-3 rounded-lg hover:bg-green-800 flex items-center justify-center gap-2 font-bold mt-4 shadow-md transition-transform active:scale-95 ${uploading ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
               {uploading ? <Loader2 className="animate-spin" /> : <Plus size={20} />}
-              Publikasikan Berita
+              {uploading ? 'Mengupload...' : 'Publikasikan Berita'}
             </button>
           </div>
         </form>
       </div>
 
-      {/* List Dokumentasi */}
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
         {data.map((item) => (
           <div key={item.id} className="bg-white rounded-xl shadow-md overflow-hidden border border-gray-200 flex flex-col hover:shadow-lg transition-shadow">
@@ -256,7 +266,6 @@ export default function AdminDokumentasiPage() {
                     </span>
                     <h3 className="font-bold text-lg text-black mb-2 line-clamp-2">{item.judul}</h3>
                     
-                    {/* Preview Deskripsi (Strip HTML Tags untuk preview sederhana) */}
                     <div 
                         className="text-sm text-gray-600 line-clamp-2"
                         dangerouslySetInnerHTML={{ __html: item.deskripsi }}

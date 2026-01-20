@@ -3,7 +3,7 @@
 import { useState, useEffect, FormEvent, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { Potensi } from '@/types'
-import { Loader2, Plus, Trash2, MapPin, Image as ImageIcon, Type, UploadCloud, X, CheckCircle, XCircle, Tag } from 'lucide-react'
+import { Loader2, Plus, Trash2, MapPin, Image as ImageIcon, Type, UploadCloud, X, Tag } from 'lucide-react'
 import Image from 'next/image'
 import TextEditor from '@/components/TextEditor'
 
@@ -60,11 +60,25 @@ export default function AdminPotensiPage() {
         setFile(null)
         if (fileInputRef.current) fileInputRef.current.value = ''
     }
-    // -------------------------
 
+    // --- HANDLE UPLOAD DENGAN VALIDASI ---
     const handleUpload = async (e: FormEvent) => {
         e.preventDefault()
+        
+        // 1. Validasi File
         if (!file) return alert('Pilih foto terlebih dahulu')
+
+        // 2. Validasi Ukuran (Max 2MB)
+        if (file.size > 2 * 1024 * 1024) {
+            alert('File terlalu besar (Max 2MB). Harap kecilkan ukuran foto agar website tidak berat.')
+            return
+        }
+        
+        // 3. Validasi Tipe
+        if (!file.type.startsWith('image/')) {
+            alert('Hanya boleh mengupload file gambar.')
+            return
+        }
 
         setUploading(true)
         try {
@@ -73,7 +87,7 @@ export default function AdminPotensiPage() {
             const filePath = `${fileName}`
 
             const { error: uploadError } = await supabase.storage
-                .from('potensi') // Pastikan bucket 'potensi' ada
+                .from('potensi')
                 .upload(filePath, file)
 
             if (uploadError) throw uploadError
@@ -90,7 +104,7 @@ export default function AdminPotensiPage() {
                     lokasi,
                     kategori,
                     foto_url: publicUrl,
-                    status: 'aktif' // Default aktif saat create
+                    status: 'aktif'
                 }])
 
             if (dbError) throw dbError
@@ -103,7 +117,7 @@ export default function AdminPotensiPage() {
 
         } catch (error) {
             console.error('Error:', error)
-            alert('Gagal upload. Pastikan bucket "potensi" sudah dibuat.')
+            alert('Gagal upload. Coba lagi nanti.')
         } finally {
             setUploading(false)
         }
@@ -204,6 +218,7 @@ export default function AdminPotensiPage() {
                                     <input type="file" accept="image/*" ref={fileInputRef} onChange={e => setFile(e.target.files?.[0] || null)} className="hidden" />
                                     <UploadCloud className="mx-auto text-gray-400 mb-2" size={32} />
                                     <p className="text-sm text-blue-600">Klik atau Drag foto kesini</p>
+                                    <p className="text-xs text-red-500 mt-1">*Max 2MB</p>
                                 </div>
                             ) : (
                                 <div className="flex items-center gap-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
@@ -225,16 +240,15 @@ export default function AdminPotensiPage() {
                         <button
                             disabled={uploading}
                             type="submit"
-                            className="w-full bg-blue-600 text-white px-4 py-2.5 rounded-lg hover:bg-blue-700 flex items-center justify-center gap-2 font-medium"
+                            className={`w-full bg-blue-600 text-white px-4 py-2.5 rounded-lg hover:bg-blue-700 flex items-center justify-center gap-2 font-medium ${uploading ? 'opacity-50 cursor-not-allowed' : ''}`}
                         >
                             {uploading ? <Loader2 className="animate-spin" /> : <Plus size={18} />}
-                            Simpan Potensi
+                            {uploading ? 'Menyimpan...' : 'Simpan Potensi'}
                         </button>
                     </div>
                 </form>
             </div>
 
-            {/* List Potensi */}
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {data.map((item) => (
                     <div key={item.id} className={`bg-white rounded-xl shadow-sm overflow-hidden border-2 ${item.status === 'aktif' ? 'border-transparent' : 'border-gray-200 opacity-75'}`}>

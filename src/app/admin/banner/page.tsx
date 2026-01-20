@@ -3,7 +3,7 @@
 import { useState, useEffect, FormEvent } from 'react'
 import { supabase } from '@/lib/supabase'
 import { Banner } from '@/types'
-import { Loader2, Plus, Trash2, CheckCircle, XCircle, Image as ImageIcon } from 'lucide-react'
+import { Loader2, Plus, Trash2, CheckCircle, Image as ImageIcon } from 'lucide-react'
 import Image from 'next/image'
 
 export default function AdminBannerPage() {
@@ -35,36 +35,52 @@ export default function AdminBannerPage() {
     }
   }
 
+  // --- BAGIAN YANG DIPERBAIKI (VALIDASI GAMBAR) ---
   const handleUpload = async (e: FormEvent) => {
     e.preventDefault()
+    
+    // 1. Validasi Keberadaan File
     if (!file) return alert('Pilih gambar terlebih dahulu')
+
+    // 2. Validasi Ukuran File (Max 2MB)
+    const MAX_SIZE = 2 * 1024 * 1024 // 2MB dalam bytes
+    if (file.size > MAX_SIZE) {
+      alert('Ukuran file terlalu besar! Maksimal 2MB agar website tidak lambat. Silakan kecilkan ukuran foto terlebih dahulu.')
+      return
+    }
+
+    // 3. Validasi Tipe File
+    if (!file.type.startsWith('image/')) {
+      alert('File harus berupa gambar (JPG, PNG, JPEG).')
+      return
+    }
 
     setUploading(true)
     try {
-      // 1. Upload Gambar
+      // Upload Gambar
       const fileExt = file.name.split('.').pop()
       const fileName = `${Date.now()}.${fileExt}`
       const filePath = `${fileName}`
 
       const { error: uploadError } = await supabase.storage
-        .from('banners') // Pastikan bucket 'banners' sudah dibuat di Supabase Storage
+        .from('banners')
         .upload(filePath, file)
 
       if (uploadError) throw uploadError
 
-      // 2. Dapat Public URL
+      // Dapat Public URL
       const { data: { publicUrl } } = supabase.storage
         .from('banners')
         .getPublicUrl(filePath)
 
-      // 3. Simpan ke Database
+      // Simpan ke Database
       const { error: dbError } = await supabase
         .from('banners')
         .insert([{
           judul,
           deskripsi,
           foto_url: publicUrl,
-          status: 'non-aktif' // Default non-aktif
+          status: 'non-aktif' 
         }])
 
       if (dbError) throw dbError
@@ -78,23 +94,22 @@ export default function AdminBannerPage() {
 
     } catch (error) {
       console.error('Error:', error)
-      alert('Gagal mengupload banner. Pastikan bucket "banners" sudah ada di Supabase Storage.')
+      alert('Gagal mengupload banner. Pastikan koneksi internet lancar dan bucket "banners" sudah ada.')
     } finally {
       setUploading(false)
     }
   }
+  // --- AKHIR PERBAIKAN ---
 
   const toggleStatus = async (id: number, currentStatus: string) => {
     try {
-      // Jika ingin mengaktifkan, non-aktifkan yang lain dulu (opsional, agar cuma 1 yg aktif)
       if (currentStatus === 'non-aktif') {
         await supabase
           .from('banners')
           .update({ status: 'non-aktif' })
-          .neq('id', 0) // Update semua
+          .neq('id', 0) 
       }
 
-      // Update status target
       const newStatus = currentStatus === 'aktif' ? 'non-aktif' : 'aktif'
       await supabase.from('banners').update({ status: newStatus }).eq('id', id)
       
@@ -108,12 +123,7 @@ export default function AdminBannerPage() {
     if (!confirm('Yakin ingin menghapus banner ini?')) return
 
     try {
-        // Hapus data dari DB
         await supabase.from('banners').delete().eq('id', id)
-        
-        // Hapus gambar dari Storage (Opsional, agar bersih)
-        // Logic penghapusan storage bisa ditambahkan di sini jika perlu
-
         fetchBanners()
     } catch (error) {
         console.error('Error deleting:', error)
@@ -129,51 +139,50 @@ export default function AdminBannerPage() {
         <h2 className="text-lg text-green-900 font-semibold mb-4 flex items-center gap-2">
             <Plus size={20} /> Tambah Banner Baru
         </h2>
-<form onSubmit={handleUpload} className="space-y-4">
-    <div className="grid md:grid-cols-2 gap-4">
-        <div>
-            {/* LABEL TEBAL & HITAM */}
-            <label className="block text-sm font-bold text-gray-900 mb-2">Judul Utama</label>
-            <input 
-                type="text" 
-                value={judul}
-                onChange={e => setJudul(e.target.value)}
-                // BORDER LEBIH TEGAS (gray-400) & TEKS HITAM
-                className="w-full border border-gray-400 p-2.5 rounded-lg text-gray-900 font-medium placeholder:text-gray-500 focus:ring-2 focus:ring-green-500 outline-none"
-                placeholder="Contoh: Selamat Datang di Desa Citamiang"
-                required
-            />
-        </div>
-        <div>
-            <label className="block text-sm font-bold text-gray-900 mb-2">Upload Gambar</label>
-            <input 
-                type="file" 
-                accept="image/*"
-                onChange={e => setFile(e.target.files ? e.target.files[0] : null)}
-                className="w-full border border-gray-400 p-2 rounded-lg text-gray-900 font-medium file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-green-50 file:text-green-700 hover:file:bg-green-100"
-                required
-            />
-        </div>
-    </div>
-    <div>
-        <label className="block text-sm font-bold text-gray-900 mb-2">Deskripsi Singkat</label>
-        <textarea 
-            value={deskripsi}
-            onChange={e => setDeskripsi(e.target.value)}
-            className="w-full border border-gray-400 p-2.5 rounded-lg text-gray-900 font-medium placeholder:text-gray-500 focus:ring-2 focus:ring-green-500 outline-none"
-            placeholder="Contoh: Desa yang Asri, Maju, dan Sejahtera"
-            rows={2}
-        />
-    </div>
-    <button 
-        disabled={uploading}
-        type="submit" 
-        className="bg-green-600 text-white px-6 py-2.5 rounded-lg hover:bg-green-700 flex items-center gap-2 font-bold shadow-sm"
-    >
-        {uploading ? <Loader2 className="animate-spin" /> : <ImageIcon size={18} />}
-        Upload Banner
-    </button>
-</form>
+        <form onSubmit={handleUpload} className="space-y-4">
+            <div className="grid md:grid-cols-2 gap-4">
+                <div>
+                    <label className="block text-sm font-bold text-gray-900 mb-2">Judul Utama</label>
+                    <input 
+                        type="text" 
+                        value={judul}
+                        onChange={e => setJudul(e.target.value)}
+                        className="w-full border border-gray-400 p-2.5 rounded-lg text-gray-900 font-medium placeholder:text-gray-500 focus:ring-2 focus:ring-green-500 outline-none"
+                        placeholder="Contoh: Selamat Datang di Desa Citamiang"
+                        required
+                    />
+                </div>
+                <div>
+                    <label className="block text-sm font-bold text-gray-900 mb-2">Upload Gambar</label>
+                    <input 
+                        type="file" 
+                        accept="image/*"
+                        onChange={e => setFile(e.target.files ? e.target.files[0] : null)}
+                        className="w-full border border-gray-400 p-2 rounded-lg text-gray-900 font-medium file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-green-50 file:text-green-700 hover:file:bg-green-100"
+                        required
+                    />
+                    <p className="text-xs text-red-500 mt-1 font-bold">*Maksimal ukuran file 2MB</p>
+                </div>
+            </div>
+            <div>
+                <label className="block text-sm font-bold text-gray-900 mb-2">Deskripsi Singkat</label>
+                <textarea 
+                    value={deskripsi}
+                    onChange={e => setDeskripsi(e.target.value)}
+                    className="w-full border border-gray-400 p-2.5 rounded-lg text-gray-900 font-medium placeholder:text-gray-500 focus:ring-2 focus:ring-green-500 outline-none"
+                    placeholder="Contoh: Desa yang Asri, Maju, dan Sejahtera"
+                    rows={2}
+                />
+            </div>
+            <button 
+                disabled={uploading}
+                type="submit" 
+                className={`bg-green-600 text-white px-6 py-2.5 rounded-lg hover:bg-green-700 flex items-center gap-2 font-bold shadow-sm ${uploading ? 'opacity-50 cursor-not-allowed' : ''}`}
+            >
+                {uploading ? <Loader2 className="animate-spin" /> : <ImageIcon size={18} />}
+                {uploading ? 'Sedang Mengupload...' : 'Upload Banner'}
+            </button>
+        </form>
       </div>
 
       {/* List Banner */}
