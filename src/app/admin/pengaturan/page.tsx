@@ -2,7 +2,6 @@
 
 import { useState, useEffect, FormEvent } from 'react'
 import { supabase } from '@/lib/supabase'
-import { ProfilDesa } from '@/types'
 import { Save, Loader2, Building, Phone, BookOpen, History } from 'lucide-react'
 
 export default function AdminPengaturanPage() {
@@ -24,12 +23,7 @@ export default function AdminPengaturanPage() {
 
   const fetchProfil = async () => {
     try {
-      // Ambil data baris pertama (karena cuma ada 1 profil)
-      const { data, error } = await supabase
-        .from('profil_desa')
-        .select('*')
-        .single() // .single() penting karena kita cuma mau 1 data
-      
+      const { data, error } = await supabase.from('profil_desa').select('*').single()
       if (data) {
         setNamaDesa(data.nama_desa || '')
         setAlamat(data.alamat_lengkap || '')
@@ -50,11 +44,6 @@ export default function AdminPengaturanPage() {
     e.preventDefault()
     setSaving(true)
     try {
-      // Update data (kita asumsikan ID=1 atau update row pertama yang ditemukan)
-      // Supabase update tanpa where ID agak tricky, jadi kita update semua record (toh cuma 1)
-      // Atau lebih aman ambil ID dulu, tapi karena single row, trik update ID=1 biasanya aman jika dari awal sudah insert.
-      
-      // Cara paling aman: Update row yang ID-nya ada (biasanya 1)
       const { error } = await supabase
         .from('profil_desa')
         .update({
@@ -66,7 +55,7 @@ export default function AdminPengaturanPage() {
             visi: visi,
             misi: misi
         })
-        .eq('id', 1) // Asumsi ID 1 (sesuai insert awal)
+        .eq('id', 1)
 
       if (error) throw error
       alert('Pengaturan berhasil disimpan!')
@@ -78,68 +67,68 @@ export default function AdminPengaturanPage() {
     }
   }
 
-  if (loading) return <div className="p-8 text-center">Memuat data...</div>
+  // Class untuk Input agar kontras tinggi (HITAM DI ATAS PUTIH)
+  const inputClass = "w-full border border-gray-400 rounded-lg px-4 py-3 bg-white text-black placeholder:text-gray-600 focus:outline-none focus:ring-2 focus:ring-green-500 font-medium"
+  const labelClass = "block text-sm font-bold text-black mb-2"
+
+  if (loading) return <div className="p-8 text-center text-black">Memuat data...</div>
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-gray-900 mb-6">Pengaturan Profil Desa</h1>
+      <h1 className="text-2xl font-bold text-black mb-6">Pengaturan Profil Desa</h1>
       
       <form onSubmit={handleSave} className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 space-y-8">
         
         {/* Identitas Dasar */}
         <div>
-            <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
-                <Building size={20} className="text-green-600" /> Identitas & Kontak
+            <h3 className="text-lg font-bold text-black mb-4 flex items-center gap-2 border-b pb-2">
+                <Building size={20} className="text-green-700" /> Identitas & Kontak
             </h3>
-            <div className="grid md:grid-cols-2 gap-4">
+            <div className="grid md:grid-cols-2 gap-6">
                 <div>
-                    <label className="block text-sm font-bold text-gray-900 mb-1">Nama Desa</label>
-                    <input type="text" value={namaDesa} onChange={e => setNamaDesa(e.target.value)} className="w-full border border-gray-400 rounded-lg px-3 py-2" required />
+                    <label className={labelClass}>Nama Desa</label>
+                    <input type="text" value={namaDesa} onChange={e => setNamaDesa(e.target.value)} className={inputClass} required />
                 </div>
                 <div>
-                    <label className="block text-sm font-bold text-gray-900 mb-1">Email</label>
-                    <input type="email" value={email} onChange={e => setEmail(e.target.value)} className="w-full border border-gray-400 rounded-lg px-3 py-2" />
+                    <label className={labelClass}>Email</label>
+                    <input type="email" value={email} onChange={e => setEmail(e.target.value)} className={inputClass} />
                 </div>
                 <div>
-                    <label className="block text-sm font-bold text-gray-900 mb-1">No. Telepon / WA</label>
-                    <input type="text" value={telepon} onChange={e => setTelepon(e.target.value)} className="w-full border border-gray-400 rounded-lg px-3 py-2" />
+                    <label className={labelClass}>No. Telepon / WA</label>
+                    <input type="text" value={telepon} onChange={e => setTelepon(e.target.value)} className={inputClass} />
                 </div>
                 <div className="md:col-span-2">
-                    <label className="block text-sm font-bold text-gray-900 mb-1">Alamat Lengkap</label>
-                    <textarea value={alamat} onChange={e => setAlamat(e.target.value)} className="w-full border border-gray-400 rounded-lg px-3 py-2 h-20" />
+                    <label className={labelClass}>Alamat Lengkap</label>
+                    <textarea value={alamat} onChange={e => setAlamat(e.target.value)} className={inputClass} rows={3} />
                 </div>
             </div>
         </div>
-
-        <hr />
 
         {/* Sejarah */}
         <div>
-            <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
-                <History size={20} className="text-blue-600" /> Sejarah Desa
+            <h3 className="text-lg font-bold text-black mb-4 flex items-center gap-2 border-b pb-2">
+                <History size={20} className="text-blue-700" /> Sejarah Desa
             </h3>
             <div>
-                <label className="block text-sm font-bold text-gray-900 mb-1">Cerita Sejarah</label>
-                <textarea value={sejarah} onChange={e => setSejarah(e.target.value)} className="w-full border border-gray-400 rounded-lg px-3 py-2 h-40" />
+                <label className={labelClass}>Cerita Sejarah</label>
+                <textarea value={sejarah} onChange={e => setSejarah(e.target.value)} className={inputClass} rows={6} />
             </div>
         </div>
 
-        <hr />
-
         {/* Visi Misi */}
         <div>
-            <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
-                <BookOpen size={20} className="text-purple-600" /> Visi & Misi
+            <h3 className="text-lg font-bold text-black mb-4 flex items-center gap-2 border-b pb-2">
+                <BookOpen size={20} className="text-purple-700" /> Visi & Misi
             </h3>
-            <div className="space-y-4">
+            <div className="space-y-6">
                 <div>
-                    <label className="block text-sm font-bold text-gray-900 mb-1">Visi</label>
-                    <textarea value={visi} onChange={e => setVisi(e.target.value)} className="w-full border border-gray-400 rounded-lg px-3 py-2 h-20" placeholder="Visi desa..." />
+                    <label className={labelClass}>Visi</label>
+                    <textarea value={visi} onChange={e => setVisi(e.target.value)} className={inputClass} rows={3} placeholder="Visi desa..." />
                 </div>
                 <div>
-                    <label className="block text-sm font-bold text-gray-900 mb-1">Misi</label>
-                    <textarea value={misi} onChange={e => setMisi(e.target.value)} className="w-full border border-gray-400 rounded-lg px-3 py-2 h-40" placeholder="Tuliskan misi per baris (Enter untuk poin baru)" />
-                    <p className="text-xs text-gray-500 mt-1">*Gunakan tombol Enter untuk memisahkan poin misi.</p>
+                    <label className={labelClass}>Misi</label>
+                    <textarea value={misi} onChange={e => setMisi(e.target.value)} className={inputClass} rows={6} placeholder="Tuliskan misi per baris (Enter untuk poin baru)" />
+                    <p className="text-xs text-gray-600 font-bold mt-2">*Gunakan tombol Enter untuk memisahkan poin misi.</p>
                 </div>
             </div>
         </div>
@@ -147,7 +136,7 @@ export default function AdminPengaturanPage() {
         <button 
             type="submit" 
             disabled={saving}
-            className="bg-green-700 text-white px-6 py-3 rounded-lg font-bold hover:bg-green-800 flex items-center gap-2 shadow-md"
+            className="bg-green-700 text-white px-8 py-3 rounded-lg font-bold hover:bg-green-800 flex items-center gap-2 shadow-md transition-all active:scale-95"
         >
             {saving ? <Loader2 className="animate-spin" /> : <Save size={20} />}
             Simpan Perubahan

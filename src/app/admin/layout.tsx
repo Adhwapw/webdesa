@@ -10,6 +10,7 @@ import {
   Store,
   Users,
   LogOut,
+  Settings,
   Menu,
   X,
   LucideIcon,
@@ -56,6 +57,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     { name: 'Potensi Desa', href: '/admin/potensi', icon: MapPin },
     { name: 'UMKM', href: '/admin/umkm', icon: Store },
     { name: 'Perangkat Desa', href: '/admin/perangkat', icon: Users },
+    { name: 'Pengaturan', href: '/admin/pengaturan', icon: Settings },
   ]
 
   return (

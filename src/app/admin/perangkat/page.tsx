@@ -29,7 +29,7 @@ export default function AdminPerangkatPage() {
       const { data, error } = await supabase
         .from('perangkat_desa')
         .select('*')
-        .order('urutan', { ascending: true }) // Urutkan biar admin gampang lihat hirarki
+        .order('urutan', { ascending: true })
       
       if (data) setData(data as PerangkatDesa[])
     } catch (error) {
@@ -67,7 +67,7 @@ export default function AdminPerangkatPage() {
       const filePath = `${fileName}`
 
       const { error: uploadError } = await supabase.storage
-        .from('perangkat_desa') // Bucket baru
+        .from('perangkat_desa')
         .upload(filePath, file)
 
       if (uploadError) throw uploadError
@@ -89,7 +89,7 @@ export default function AdminPerangkatPage() {
       if (dbError) throw dbError
 
       // Reset Form
-      setNama(''); setJabatan(''); setUrutan(prev => (parseInt(prev) + 1).toString()); // Auto increment urutan buat kemudahan
+      setNama(''); setJabatan(''); setUrutan(prev => (parseInt(prev) + 1).toString());
       removeFile();
       fetchData();
       alert('Perangkat desa berhasil ditambahkan!')
@@ -122,26 +122,32 @@ export default function AdminPerangkatPage() {
     }
   }
 
+  // REUSABLE STYLES (Agar konsisten & mudah dibaca)
+  const labelClass = "block text-sm font-bold text-black mb-2"
+  const inputContainerClass = "relative"
+  const iconClass = "absolute left-3 top-3 text-gray-600"
+  const inputClass = "w-full pl-10 pr-4 py-2.5 border border-gray-400 rounded-lg bg-white text-black placeholder:text-gray-600 focus:outline-none focus:ring-2 focus:ring-green-500 font-medium transition-all"
+
   return (
     <div>
-      <h1 className="text-2xl font-bold text-gray-800 mb-6">Kelola Perangkat Desa</h1>
+      <h1 className="text-2xl font-bold text-black mb-6">Kelola Perangkat Desa</h1>
 
-      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 mb-8">
-        <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-          <Plus size={20} /> Tambah Anggota
+      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 mb-8">
+        <h2 className="text-lg font-bold text-black mb-4 flex items-center gap-2 border-b pb-2">
+          <Plus size={20} className="text-green-700" /> Tambah Anggota
         </h2>
         
         <form onSubmit={handleUpload} className="grid md:grid-cols-2 gap-6">
-          <div className="space-y-4">
+          <div className="space-y-5">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Nama Lengkap</label>
-              <div className="relative">
-                <User className="absolute left-3 top-3 text-gray-400" size={18} />
+              <label className={labelClass}>Nama Lengkap</label>
+              <div className={inputContainerClass}>
+                <User className={iconClass} size={18} />
                 <input 
                   type="text"
                   value={nama}
                   onChange={e => setNama(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-gray-500 outline-none"
+                  className={inputClass}
                   placeholder="Nama beserta gelar"
                   required
                 />
@@ -150,40 +156,40 @@ export default function AdminPerangkatPage() {
 
             <div className="grid grid-cols-2 gap-4">
                 <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Jabatan</label>
-                    <div className="relative">
-                        <Briefcase className="absolute left-3 top-3 text-gray-400" size={18} />
+                    <label className={labelClass}>Jabatan</label>
+                    <div className={inputContainerClass}>
+                        <Briefcase className={iconClass} size={18} />
                         <input 
                         type="text"
                         value={jabatan}
                         onChange={e => setJabatan(e.target.value)}
-                        className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-gray-500 outline-none"
+                        className={inputClass}
                         placeholder="Contoh: Kepala Desa"
                         required
                         />
                     </div>
                 </div>
                 <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">No. Urut</label>
-                    <div className="relative">
-                        <ListOrdered className="absolute left-3 top-3 text-gray-400" size={18} />
+                    <label className={labelClass}>No. Urut</label>
+                    <div className={inputContainerClass}>
+                        <ListOrdered className={iconClass} size={18} />
                         <input 
                         type="number"
                         value={urutan}
                         onChange={e => setUrutan(e.target.value)}
-                        className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-gray-500 outline-none"
+                        className={inputClass}
                         placeholder="1"
                         required
                         />
                     </div>
-                    <p className="text-xs text-gray-500 mt-1">*Semakin kecil angka, semakin di atas.</p>
+                    <p className="text-xs text-gray-600 font-bold mt-1">*Semakin kecil angka, semakin di atas.</p>
                 </div>
             </div>
           </div>
 
-          <div className="space-y-4">
+          <div className="space-y-5">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Foto Profil</label>
+              <label className={labelClass}>Foto Profil</label>
               {!file ? (
                 <div 
                   onDragOver={handleDragOver}
@@ -191,18 +197,18 @@ export default function AdminPerangkatPage() {
                   onDrop={handleDrop}
                   onClick={() => fileInputRef.current?.click()}
                   className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-all ${
-                    isDragging ? 'border-gray-500 bg-gray-50' : 'border-gray-300 hover:bg-gray-50'
+                    isDragging ? 'border-green-500 bg-green-50' : 'border-gray-400 hover:bg-gray-50'
                   }`}
                 >
                   <input type="file" accept="image/*" ref={fileInputRef} onChange={e => setFile(e.target.files?.[0] || null)} className="hidden" />
-                  <UploadCloud className="mx-auto text-gray-400 mb-2" size={32} />
-                  <p className="text-sm text-gray-600">Klik atau Drag foto kesini</p>
+                  <UploadCloud className="mx-auto text-gray-500 mb-2" size={32} />
+                  <p className="text-sm text-gray-700 font-medium">Klik atau Drag foto kesini</p>
                 </div>
               ) : (
-                <div className="flex items-center gap-3 p-3 bg-gray-50 border border-gray-200 rounded-lg">
-                  <ImageIcon className="text-gray-600" />
-                  <span className="text-sm truncate flex-1">{file.name}</span>
-                  <button type="button" onClick={removeFile}><X size={18} className="text-red-500" /></button>
+                <div className="flex items-center gap-3 p-3 bg-white border border-gray-300 rounded-lg shadow-sm">
+                  <ImageIcon className="text-green-600" />
+                  <span className="text-sm font-medium text-black truncate flex-1">{file.name}</span>
+                  <button type="button" onClick={removeFile}><X size={18} className="text-red-600 hover:scale-110 transition-transform" /></button>
                 </div>
               )}
             </div>
@@ -210,9 +216,9 @@ export default function AdminPerangkatPage() {
             <button 
               disabled={uploading}
               type="submit" 
-              className="w-full bg-gray-800 text-white px-4 py-2.5 rounded-lg hover:bg-gray-900 flex items-center justify-center gap-2 font-medium mt-7"
+              className="w-full bg-green-700 text-white px-4 py-3 rounded-lg hover:bg-green-800 flex items-center justify-center gap-2 font-bold mt-2 shadow-md transition-transform active:scale-95"
             >
-              {uploading ? <Loader2 className="animate-spin" /> : <Plus size={18} />}
+              {uploading ? <Loader2 className="animate-spin" /> : <Plus size={20} />}
               Simpan Anggota
             </button>
           </div>
@@ -222,30 +228,30 @@ export default function AdminPerangkatPage() {
       {/* List Perangkat */}
       <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
         {data.map((item) => (
-          <div key={item.id} className={`bg-white rounded-xl shadow-sm overflow-hidden border-2 flex flex-col items-center p-6 ${item.status === 'aktif' ? 'border-transparent' : 'border-gray-200 opacity-75'}`}>
-            <div className="relative w-24 h-24 rounded-full overflow-hidden bg-gray-100 mb-4 border-2 border-gray-100">
+          <div key={item.id} className={`bg-white rounded-xl shadow-md overflow-hidden border flex flex-col items-center p-6 transition-all hover:-translate-y-1 ${item.status === 'aktif' ? 'border-gray-200' : 'border-gray-200 opacity-75 bg-gray-50'}`}>
+            <div className="relative w-24 h-24 rounded-full overflow-hidden bg-gray-100 mb-4 border-4 border-gray-100 shadow-sm">
               {item.foto_url ? (
                 <Image src={item.foto_url} alt={item.nama_lengkap} fill className="object-cover" />
-              ) : <div className="h-full flex items-center justify-center"><User className="text-gray-400" /></div>}
+              ) : <div className="h-full flex items-center justify-center"><User className="text-gray-400" size={32} /></div>}
             </div>
             
             <div className="text-center w-full">
-                <span className="inline-block bg-gray-100 text-gray-600 text-xs px-2 py-0.5 rounded-full mb-2">
+                <span className="inline-block bg-gray-200 text-black font-bold text-xs px-2.5 py-1 rounded-full mb-2">
                     Urutan: {item.urutan}
                 </span>
-                <h3 className="font-bold text-gray-800 line-clamp-1">{item.nama_lengkap}</h3>
-                <p className="text-green-600 text-sm font-medium mb-4">{item.jabatan}</p>
+                <h3 className="font-bold text-lg text-black line-clamp-1">{item.nama_lengkap}</h3>
+                <p className="text-green-700 font-bold text-sm mb-4">{item.jabatan}</p>
                 
-                <div className="pt-3 border-t w-full flex justify-between items-center gap-2">
+                <div className="pt-4 border-t border-gray-200 w-full flex justify-between items-center gap-2">
                     <button 
                         onClick={() => toggleStatus(item.id, item.status)}
-                        className={`flex-1 text-xs font-semibold py-1.5 rounded-md transition-colors ${item.status === 'aktif' ? 'bg-red-50 text-red-600 hover:bg-red-100' : 'bg-green-50 text-green-600 hover:bg-green-100'}`}
+                        className={`flex-1 text-xs font-bold py-2 rounded-lg transition-colors ${item.status === 'aktif' ? 'bg-red-50 text-red-700 hover:bg-red-100' : 'bg-green-50 text-green-700 hover:bg-green-100'}`}
                     >
                         {item.status === 'aktif' ? 'Non-aktifkan' : 'Aktifkan'}
                     </button>
                     <button 
                     onClick={() => handleDelete(item.id)}
-                    className="text-gray-400 hover:text-red-500 p-1 transition-colors"
+                    className="text-gray-500 hover:text-red-600 p-2 rounded-lg hover:bg-red-50 transition-colors"
                     title="Hapus"
                     >
                     <Trash2 size={18} />
