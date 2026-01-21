@@ -41,11 +41,14 @@ export interface PerangkatDesa {
 }
 
 export interface AdminUser {
-  id: number;
+  id: string; // atau number, sesuaikan dengan yang ada
   username: string;
+  password?: string; // Opsional karena tidak selalu kita fetch
   nama_lengkap: string;
-  email: string;
-  role: string;
+  email?: string;
+  role?: string;
+  security_question?: string;
+  security_answer?: string;
 }
 
 export interface Banner {
@@ -55,6 +58,15 @@ export interface Banner {
   foto_url: string | null;
   status: string;
   created_at?: string;
+}
+
+
+
+export interface Statistik {
+  id: number;
+  label: string;
+  jumlah: number;
+  satuan: string;
 }
 
 export interface ProfilDesa {

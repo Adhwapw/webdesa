@@ -11,7 +11,9 @@ import {
   Users,
   LogOut,
   Settings,
+  FileText,
   Menu,
+  Briefcase,
   X,
   LucideIcon,
   Image as ImageIcon
@@ -53,10 +55,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const menuItems: MenuItem[] = [
     { name: 'Dashboard', href: '/admin', icon: LayoutDashboard },
     { name: 'Banner Depan', href: '/admin/banner', icon: ImageIcon },
+    { name: 'Kependudukan', href: '/admin/kependudukan', icon: Users },
     { name: 'Dokumentasi', href: '/admin/dokumentasi', icon: Camera },
     { name: 'Potensi Desa', href: '/admin/potensi', icon: MapPin },
     { name: 'UMKM', href: '/admin/umkm', icon: Store },
-    { name: 'Perangkat Desa', href: '/admin/perangkat', icon: Users },
+    { name: 'Perangkat Desa', href: '/admin/perangkat', icon: Briefcase },
     { name: 'Pengaturan', href: '/admin/pengaturan', icon: Settings },
   ]
 
@@ -64,9 +67,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     <ProtectedRoute>
       <div className="min-h-screen bg-gray-100 font-sans">
         {/* Sidebar */}
-        <aside className={`fixed top-0 left-0 z-40 w-64 h-screen transition-transform ${
-          sidebarOpen ? 'translate-x-0' : '-translate-x-full'
-        } md:translate-x-0 bg-green-900 text-white`}>
+        <aside className={`fixed top-0 left-0 z-40 w-64 h-screen transition-transform ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+          } md:translate-x-0 bg-green-900 text-white`}>
           <div className="h-full flex flex-col">
             <div className="p-6 border-b border-green-800">
               <h1 className="text-2xl font-bold">Admin Panel</h1>
@@ -83,11 +85,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                     key={item.href}
                     href={item.href}
                     onClick={() => setSidebarOpen(false)}
-                    className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-                      isActive
+                    className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${isActive
                         ? 'bg-green-700 text-white shadow-md'
                         : 'text-green-100 hover:bg-green-800 hover:text-white'
-                    }`}
+                      }`}
                   >
                     <Icon size={20} />
                     <span>{item.name}</span>

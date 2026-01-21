@@ -3,6 +3,7 @@
 import { useState, useEffect, FormEvent } from 'react'
 import { supabase } from '@/lib/supabase'
 import { Save, Loader2, Building, Phone, BookOpen, History } from 'lucide-react'
+import SecuritySettings from '@/components/SecuritySettings'
 
 export default function AdminPengaturanPage() {
   const [loading, setLoading] = useState(true)
@@ -77,6 +78,8 @@ export default function AdminPengaturanPage() {
     <div>
       <h1 className="text-2xl font-bold text-black mb-6">Pengaturan Profil Desa</h1>
       
+      {/* FORM 1: Profil Desa */}
+      {/* Kita tutup form ini SEBELUM bagian SecuritySettings */}
       <form onSubmit={handleSave} className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 space-y-8">
         
         {/* Identitas Dasar */}
@@ -133,6 +136,7 @@ export default function AdminPengaturanPage() {
             </div>
         </div>
 
+        {/* Tombol Simpan Profil */}
         <button 
             type="submit" 
             disabled={saving}
@@ -141,7 +145,15 @@ export default function AdminPengaturanPage() {
             {saving ? <Loader2 className="animate-spin" /> : <Save size={20} />}
             Simpan Perubahan
         </button>
-      </form>
+
+      </form> {/* <--- FORM DITUTUP DI SINI */}
+
+      {/* Bagian Keamanan (Ditaruh DI LUAR form profil desa) */}
+      <div className="mt-12">
+          <h2 className="text-xl font-bold text-black mb-4">Keamanan Akun</h2>
+          <SecuritySettings />
+      </div>
+
     </div>
   )
 }
