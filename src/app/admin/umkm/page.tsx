@@ -2,6 +2,7 @@
 
 import { useState, useEffect, FormEvent, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
+import { stripHtml } from '@/lib/utils'
 import { UMKM } from '@/types'
 import { Loader2, Plus, Trash2, Store, User, Phone, Image as ImageIcon, UploadCloud, X, Tag } from 'lucide-react'
 import Image from 'next/image'
@@ -70,13 +71,13 @@ export default function AdminUMKMPage() {
 
         // Validasi 5MB
         if (file.size > 5 * 1024 * 1024) {
-             toast.error('Foto produk terlalu besar (Max 5MB).')
-             return
+            toast.error('Foto produk terlalu besar (Max 5MB).')
+            return
         }
 
         if (!file.type.startsWith('image/')) {
-             toast.error('File harus berupa gambar.')
-             return
+            toast.error('File harus berupa gambar.')
+            return
         }
 
         setUploading(true)
@@ -88,7 +89,7 @@ export default function AdminUMKMPage() {
             const filePath = `${fileName}`
 
             const { error: uploadError } = await supabase.storage
-                .from('umkm') 
+                .from('umkm')
                 .upload(filePath, file)
 
             if (uploadError) throw uploadError
@@ -114,7 +115,7 @@ export default function AdminUMKMPage() {
             setNamaUmkm(''); setPemilik(''); setKontak(''); setDeskripsi('');
             removeFile();
             fetchData();
-            
+
             toast.dismiss(toastId)
             toast.success('UMKM berhasil ditambahkan!')
 
@@ -128,7 +129,7 @@ export default function AdminUMKMPage() {
     }
 
     const openDeleteModal = (id: number) => { setDeleteId(id); setIsDeleteOpen(true) }
-    
+
     const confirmDelete = async () => {
         if (!deleteId) return
         setDeleteLoading(true)
@@ -136,7 +137,7 @@ export default function AdminUMKMPage() {
             await supabase.from('umkm').delete().eq('id', deleteId)
             fetchData(); toast.success('Data dihapus')
             setIsDeleteOpen(false)
-        } catch { toast.error('Gagal menghapus data') } 
+        } catch { toast.error('Gagal menghapus data') }
         finally { setDeleteLoading(false) }
     }
 
@@ -156,11 +157,11 @@ export default function AdminUMKMPage() {
 
     return (
         <div>
-            <DeleteModal 
-                isOpen={isDeleteOpen} 
-                onClose={() => setIsDeleteOpen(false)} 
-                onConfirm={confirmDelete} 
-                loading={deleteLoading} 
+            <DeleteModal
+                isOpen={isDeleteOpen}
+                onClose={() => setIsDeleteOpen(false)}
+                onConfirm={confirmDelete}
+                loading={deleteLoading}
             />
 
             <h1 className="text-2xl font-bold text-yellow-800 mb-6">Kelola UMKM Desa</h1>
@@ -172,7 +173,7 @@ export default function AdminUMKMPage() {
 
                 {/* --- PERUBAHAN LAYOUT DI SINI --- */}
                 <form onSubmit={handleUpload} className="grid md:grid-cols-2 gap-8">
-                    
+
                     {/* KOLOM KIRI: Input Data & Foto */}
                     <div className="space-y-5">
                         <div>
@@ -314,6 +315,10 @@ export default function AdminUMKMPage() {
                             <div className="flex items-center text-xs text-gray-500 mb-3">
                                 <Phone size={12} className="mr-1" /> {item.kontak}
                             </div>
+
+                            <p className="text-gray-500 text-sm line-clamp-2 mb-4 h-10 whitespace-pre-line">
+                                {stripHtml(item.deskripsi,8)}
+                            </p>
 
                             <div className="pt-3 border-t flex justify-between items-center">
                                 <button

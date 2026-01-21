@@ -1,4 +1,5 @@
 import Image from "next/image";
+import { stripHtml } from "@/lib/utils";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { Calendar, MapPin, Store, Users, ArrowRight, Quote } from "lucide-react";
@@ -21,13 +22,13 @@ async function getLatestData(): Promise<HomePageData> {
     const [dokumentasi, potensi, umkm, perangkat, bannerData] = await Promise.all([
       // 1. Dokumentasi: Ambil 3 terbaru
       supabase.from("dokumentasi").select("*").order("tanggal", { ascending: false }).limit(3),
-      
+
       // 2. Potensi: Ambil 3 yang status aktif
       supabase.from("potensi").select("*").eq("status", "aktif").limit(3),
-      
+
       // 3. UMKM: Ambil 3 yang status aktif
       supabase.from("umkm").select("*").eq("status", "aktif").limit(3),
-      
+
       // 4. Kepala Desa: Ambil perangkat dengan urutan 1 (paling atas)
       supabase.from("perangkat_desa").select("*").eq("status", "aktif").order("urutan", { ascending: true }).limit(1),
 
@@ -62,7 +63,7 @@ export default async function Home() {
     judul: banner?.judul || "Selamat Datang di Desa Citamiang",
     deskripsi: banner?.deskripsi || "Membangun Desa di Ujung Selatan Purwakarta yang Asri dan Berdaya Saing.",
   };
-  
+
   // JSON-LD untuk SEO Google
   const jsonLd = {
     '@context': 'https://schema.org',
@@ -79,8 +80,8 @@ export default async function Home() {
 
   return (
     <main className="bg-gray-50 overflow-x-hidden">
-       {/* Inject JSON-LD Schema */}
-       <script
+      {/* Inject JSON-LD Schema */}
+      <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
@@ -88,20 +89,20 @@ export default async function Home() {
       {/* 1. HERO SECTION (Banner) */}
       <section className="relative h-[500px] md:h-[600px] bg-gray-900 overflow-hidden">
         {banner?.foto_url ? (
-             <div className="absolute inset-0">
-                <Image 
-                    src={banner.foto_url} 
-                    alt="Banner Desa Citamiang" 
-                    fill 
-                    className="object-cover"
-                    priority
-                />
-                 <div className="absolute inset-0 bg-gradient-to-t from-gray-900 via-gray-900/40 to-transparent"></div>
-             </div>
+          <div className="absolute inset-0">
+            <Image
+              src={banner.foto_url}
+              alt="Banner Desa Citamiang"
+              fill
+              className="object-cover"
+              priority
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-gray-900 via-gray-900/40 to-transparent"></div>
+          </div>
         ) : (
-            <div className="absolute inset-0 bg-gradient-to-br from-green-800 to-green-900">
-                <div className="absolute inset-0 opacity-10 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]"></div>
-            </div>
+          <div className="absolute inset-0 bg-gradient-to-br from-green-800 to-green-900">
+            <div className="absolute inset-0 opacity-10 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]"></div>
+          </div>
         )}
 
         <div className="relative h-full flex flex-col justify-end items-center text-white text-center px-4 z-10 pb-16 md:pb-32">
@@ -116,7 +117,7 @@ export default async function Home() {
             <p className="text-base sm:text-lg md:text-xl mb-6 md:mb-8 text-gray-200 drop-shadow-md max-w-2xl mx-auto px-2">
               {heroData.deskripsi}
             </p>
-            
+
             {/* Tombol Responsif (Stack di HP) */}
             <div className="flex flex-col sm:flex-row gap-3 md:gap-4 justify-center w-full sm:w-auto px-6">
               <Link
@@ -161,9 +162,9 @@ export default async function Home() {
         <section className="py-16 md:py-28">
           <div className="max-w-6xl mx-auto px-4">
             <div className="bg-white rounded-3xl p-6 md:p-12 shadow-xl border border-gray-100 relative overflow-hidden flex flex-col md:flex-row items-center gap-8 md:gap-16">
-              
+
               <div className="absolute top-0 right-0 w-64 h-64 bg-green-50 rounded-full -translate-y-1/2 translate-x-1/2 opacity-50"></div>
-              
+
               {/* Foto Kades */}
               <div className="relative shrink-0 mt-4 md:mt-0">
                 <div className="w-40 h-40 md:w-64 md:h-64 rounded-full overflow-hidden border-[6px] border-white shadow-2xl relative z-10 mx-auto">
@@ -190,7 +191,7 @@ export default async function Home() {
                 <Quote className="text-green-200 mb-4 mx-auto md:mx-0 w-10 h-10 md:w-12 md:h-12" />
                 <h2 className="text-2xl md:text-3xl font-bold text-gray-800 mb-2">Sambutan Kepala Desa</h2>
                 <h3 className="text-lg md:text-xl text-green-700 font-bold mb-6">{kepalaDesa.nama_lengkap}</h3>
-                
+
                 {/* PERBAIKAN ESLINT DI SINI */}
                 <div className="space-y-4 text-gray-600 leading-relaxed text-base md:text-lg">
                   <p>
@@ -205,11 +206,11 @@ export default async function Home() {
                 </div>
 
                 <div className="mt-8">
-                    <img 
-                        src="https://upload.wikimedia.org/wikipedia/commons/2/29/Tanda_Tangan_Contoh.png" 
-                        alt="Tanda Tangan" 
-                        className="h-10 md:h-12 opacity-50 mx-auto md:mx-0" 
-                    />
+                  <img
+                    src="https://upload.wikimedia.org/wikipedia/commons/2/29/Tanda_Tangan_Contoh.png"
+                    alt="Tanda Tangan"
+                    className="h-10 md:h-12 opacity-50 mx-auto md:mx-0"
+                  />
                 </div>
               </div>
             </div>
@@ -256,22 +257,22 @@ export default async function Home() {
                       {item.judul}
                     </h3>
                     <p className="text-gray-600 text-sm line-clamp-3 leading-relaxed">
-                      {item.deskripsi}
+                      {stripHtml(item.deskripsi,8)}
                     </p>
                   </div>
                 </div>
               ))
             ) : (
-                <div className="col-span-full text-center py-12 text-gray-500 bg-white rounded-xl border border-dashed border-gray-300">
-                    <p>Belum ada dokumentasi terbaru.</p>
-                </div>
+              <div className="col-span-full text-center py-12 text-gray-500 bg-white rounded-xl border border-dashed border-gray-300">
+                <p>Belum ada dokumentasi terbaru.</p>
+              </div>
             )}
           </div>
-          
+
           {/* Tombol Lihat Galeri (Muncul di HP di bawah list) */}
           <div className="mt-8 text-center md:hidden">
             <Link href="/dokumentasi" className="inline-flex bg-green-100 text-green-800 px-6 py-3 rounded-full font-bold items-center gap-2">
-               Lihat Semua Kegiatan <ArrowRight size={18} />
+              Lihat Semua Kegiatan <ArrowRight size={18} />
             </Link>
           </div>
         </div>
@@ -280,26 +281,26 @@ export default async function Home() {
       {/* 5. POTENSI & UMKM HIGHLIGHT */}
       <section className="py-16 md:py-20">
         <div className="max-w-7xl mx-auto px-4">
-            <div className="bg-green-900 rounded-3xl p-8 md:p-16 text-white text-center relative overflow-hidden">
-                <div className="absolute inset-0 opacity-10 bg-[url('https://www.transparenttextures.com/patterns/diagmonds-light.png')]"></div>
-                
-                <div className="relative z-10 max-w-3xl mx-auto">
-                    <h2 className="text-2xl md:text-4xl font-bold mb-4 md:mb-6">Potensi & Ekonomi Desa</h2>
-                    <p className="text-green-100 text-base md:text-lg mb-8 md:mb-10 leading-relaxed px-2">
-                        Desa Citamiang memiliki kekayaan alam yang melimpah dan warga yang kreatif. 
-                        Jelajahi potensi wisata alam dan dukung produk UMKM lokal kami.
-                    </p>
-                    
-                    <div className="flex flex-col sm:flex-row justify-center gap-4 w-full sm:w-auto px-6">
-                        <Link href="/potensi" className="bg-white text-green-900 px-6 md:px-8 py-3 md:py-4 rounded-xl font-bold hover:bg-green-50 transition flex items-center justify-center gap-2 text-sm md:text-base">
-                            <MapPin size={20} /> Jelajahi Potensi
-                        </Link>
-                        <Link href="/umkm" className="bg-green-800 text-white border border-green-700 px-6 md:px-8 py-3 md:py-4 rounded-xl font-bold hover:bg-green-700 transition flex items-center justify-center gap-2 text-sm md:text-base">
-                            <Store size={20} /> Lihat Produk UMKM
-                        </Link>
-                    </div>
-                </div>
+          <div className="bg-green-900 rounded-3xl p-8 md:p-16 text-white text-center relative overflow-hidden">
+            <div className="absolute inset-0 opacity-10 bg-[url('https://www.transparenttextures.com/patterns/diagmonds-light.png')]"></div>
+
+            <div className="relative z-10 max-w-3xl mx-auto">
+              <h2 className="text-2xl md:text-4xl font-bold mb-4 md:mb-6">Potensi & Ekonomi Desa</h2>
+              <p className="text-green-100 text-base md:text-lg mb-8 md:mb-10 leading-relaxed px-2">
+                Desa Citamiang memiliki kekayaan alam yang melimpah dan warga yang kreatif.
+                Jelajahi potensi wisata alam dan dukung produk UMKM lokal kami.
+              </p>
+
+              <div className="flex flex-col sm:flex-row justify-center gap-4 w-full sm:w-auto px-6">
+                <Link href="/potensi" className="bg-white text-green-900 px-6 md:px-8 py-3 md:py-4 rounded-xl font-bold hover:bg-green-50 transition flex items-center justify-center gap-2 text-sm md:text-base">
+                  <MapPin size={20} /> Jelajahi Potensi
+                </Link>
+                <Link href="/umkm" className="bg-green-800 text-white border border-green-700 px-6 md:px-8 py-3 md:py-4 rounded-xl font-bold hover:bg-green-700 transition flex items-center justify-center gap-2 text-sm md:text-base">
+                  <Store size={20} /> Lihat Produk UMKM
+                </Link>
+              </div>
             </div>
+          </div>
         </div>
       </section>
     </main>

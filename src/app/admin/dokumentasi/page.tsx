@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, FormEvent, useRef } from 'react'
+import { stripHtml } from '@/lib/utils'
 import { supabase } from '@/lib/supabase'
 import { Dokumentasi } from '@/types'
 import { Loader2, Plus, Trash2, Calendar, Type, Image as ImageIcon, UploadCloud, X, Tag } from 'lucide-react'
@@ -47,15 +48,6 @@ export default function AdminDokumentasiPage() {
     }
   }
 
-  const stripHtml = (html: string) => {
-    if (!html) return ''
-    // 1. Ganti &nbsp; dengan spasi biasa
-    let text = html.replace(/&nbsp;/g, ' ')
-    // 2. Hapus semua tag HTML
-    text = text.replace(/<[^>]*>?/gm, '')
-    // 3. Trim spasi berlebih
-    return text.trim()
-  }
 
   const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); setIsDragging(true) }
   const handleDragLeave = (e: React.DragEvent) => { e.preventDefault(); setIsDragging(false) }
@@ -298,8 +290,8 @@ export default function AdminDokumentasiPage() {
                 </span>
                 <h3 className="font-bold text-lg text-black mb-2 line-clamp-2">{item.judul}</h3>
 
-                <p className="text-sm text-gray-600 line-clamp-2">
-                  {stripHtml(item.deskripsi)}
+                <p className="text-sm text-gray-600 line-clamp-2 whitespace-pre-line">
+                  {stripHtml(item.deskripsi,8)}
                 </p>
               </div>
 

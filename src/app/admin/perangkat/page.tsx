@@ -3,9 +3,8 @@
 import { useState, useEffect, FormEvent, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { PerangkatDesa } from '@/types'
-import { Loader2, Plus, Trash2, User, Briefcase, ListOrdered, Image as ImageIcon, UploadCloud, X } from 'lucide-react'
+import { Loader2, Plus, Trash2, User, Briefcase, ListOrdered, Image as ImageIcon, UploadCloud, X, Edit2, CheckCircle, XCircle } from 'lucide-react'
 import Image from 'next/image'
-import toast from 'react-hot-toast'
 
 export default function AdminPerangkatPage() {
   const [data, setData] = useState<PerangkatDesa[]>([])
@@ -13,11 +12,13 @@ export default function AdminPerangkatPage() {
   const [uploading, setUploading] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
 
+  // Form State
   const [nama, setNama] = useState('')
   const [jabatan, setJabatan] = useState('')
   const [urutan, setUrutan] = useState('1')
   const [file, setFile] = useState<File | null>(null)
   
+  // Ref
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -33,12 +34,13 @@ export default function AdminPerangkatPage() {
       
       if (data) setData(data as PerangkatDesa[])
     } catch (error) {
-      toast.error('Gagal memuat data perangkat')
+      console.error('Error fetching data:', error)
     } finally {
       setLoading(false)
     }
   }
 
+  // --- HANDLERS ---
   const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); setIsDragging(true) }
   const handleDragLeave = (e: React.DragEvent) => { e.preventDefault(); setIsDragging(false) }
   const handleDrop = (e: React.DragEvent) => {
@@ -46,7 +48,7 @@ export default function AdminPerangkatPage() {
     if (e.dataTransfer.files?.[0]) {
       const f = e.dataTransfer.files[0]
       if (f.type.startsWith('image/')) setFile(f)
-      else toast.error('Hanya file gambar!')
+      else alert('Hanya file gambar!')
     }
   }
   const removeFile = () => {
@@ -57,22 +59,10 @@ export default function AdminPerangkatPage() {
   const handleUpload = async (e: FormEvent) => {
     e.preventDefault()
     
-    if (!file) return toast.error('Pilih foto profil terlebih dahulu')
-
-    // --- UBAH LIMIT 5MB ---
-    if (file.size > 5 * 1024 * 1024) {
-        toast.error('Foto profil terlalu besar (Max 5MB).')
-        return
-    }
-
-    if (!file.type.startsWith('image/')) {
-        toast.error('File harus berupa gambar (JPG/PNG).')
-        return
-    }
+    if (!file) return alert('Pilih foto profil terlebih dahulu')
+    if (file.size > 2 * 1024 * 1024) return alert('Ukuran foto maksimal 2MB')
 
     setUploading(true)
-    const toastId = toast.loading('Menyimpan data...')
-
     try {
       const fileExt = file.name.split('.').pop()
       const fileName = `${Date.now()}.${fileExt}`
@@ -103,67 +93,63 @@ export default function AdminPerangkatPage() {
       setNama(''); setJabatan(''); setUrutan(prev => (parseInt(prev) + 1).toString());
       removeFile();
       fetchData();
-      
-      toast.dismiss(toastId)
-      toast.success('Perangkat desa berhasil ditambahkan!')
+      alert('Perangkat desa berhasil ditambahkan!')
 
     } catch (error) {
       console.error('Error:', error)
-      toast.dismiss(toastId)
-      toast.error('Gagal menyimpan data.')
+      alert('Gagal menyimpan. Pastikan bucket storage "perangkat_desa" sudah dibuat.')
     } finally {
       setUploading(false)
     }
   }
 
   const handleDelete = async (id: number) => {
-    if (!confirm('Hapus perangkat desa ini?')) return
+    if (!confirm('Yakin ingin menghapus data ini?')) return
     try {
       await supabase.from('perangkat_desa').delete().eq('id', id)
       fetchData()
-      toast.success('Data dihapus')
     } catch (error) {
-      toast.error('Gagal menghapus data')
+      console.error('Error deleting:', error)
     }
   }
 
   const toggleStatus = async (id: number, currentStatus: string) => {
-    const newStatus = currentStatus === 'aktif' ? 'non-aktif' : 'aktif'
     try {
+      const newStatus = currentStatus === 'aktif' ? 'non-aktif' : 'aktif'
       await supabase.from('perangkat_desa').update({ status: newStatus }).eq('id', id)
       fetchData()
-      toast.success('Status diubah')
     } catch (error) {
-      toast.error('Error updating status')
+      console.error('Error updating status:', error)
     }
   }
 
-  const labelClass = "block text-sm font-bold text-black mb-2"
-  const inputContainerClass = "relative"
-  const iconClass = "absolute left-3 top-3 text-gray-600"
-  const inputClass = "w-full pl-10 pr-4 py-2.5 border border-gray-400 rounded-lg bg-white text-black placeholder:text-gray-600 focus:outline-none focus:ring-2 focus:ring-green-500 font-medium transition-all"
+  // Styles Updated: Menambahkan 'text-black' dan 'bg-white' agar input terbaca jelas
+  const labelClass = "block text-sm font-bold text-gray-700 mb-2"
+  const inputClass = "w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg bg-white text-black placeholder:text-gray-400 focus:ring-2 focus:ring-blue-500 focus:outline-none transition-all"
+  const iconClass = "absolute left-3 top-3 text-gray-500"
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-black mb-6">Kelola Perangkat Desa</h1>
+      <h1 className="text-2xl font-bold text-gray-800 mb-6">Kelola Perangkat Desa</h1>
 
+      {/* --- FORM INPUT --- */}
       <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 mb-8">
-        <h2 className="text-lg font-bold text-black mb-4 flex items-center gap-2 border-b pb-2">
-          <Plus size={20} className="text-green-700" /> Tambah Anggota
+        <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2 border-b pb-2">
+          <Plus size={20} className="text-blue-600" /> Tambah Perangkat Baru
         </h2>
         
-        <form onSubmit={handleUpload} className="grid md:grid-cols-2 gap-6">
+        <form onSubmit={handleUpload} className="grid md:grid-cols-2 gap-8">
           <div className="space-y-5">
             <div>
-              <label className={labelClass}>Nama Lengkap</label>
-              <div className={inputContainerClass}>
+              <label className={labelClass}>Nama Lengkap & Gelar</label>
+              <div className="relative">
                 <User className={iconClass} size={18} />
                 <input 
                   type="text"
                   value={nama}
                   onChange={e => setNama(e.target.value)}
                   className={inputClass}
-                  placeholder="Nama beserta gelar"
+                  placeholder="Contoh: H. Ahmad Zaki, S.Kom"
                   required
                 />
               </div>
@@ -172,59 +158,73 @@ export default function AdminPerangkatPage() {
             <div className="grid grid-cols-2 gap-4">
                 <div>
                     <label className={labelClass}>Jabatan</label>
-                    <div className={inputContainerClass}>
+                    <div className="relative">
                         <Briefcase className={iconClass} size={18} />
                         <input 
-                        type="text"
-                        value={jabatan}
-                        onChange={e => setJabatan(e.target.value)}
-                        className={inputClass}
-                        placeholder="Contoh: Kepala Desa"
-                        required
+                            type="text"
+                            value={jabatan}
+                            onChange={e => setJabatan(e.target.value)}
+                            className={inputClass}
+                            placeholder="Contoh: Kaur Keuangan"
+                            list="jabatan-list"
+                            required
                         />
+                        <datalist id="jabatan-list">
+                            <option value="Kepala Desa" />
+                            <option value="Sekretaris Desa" />
+                            <option value="Kaur Keuangan" />
+                            <option value="Kaur Perencanaan" />
+                            <option value="Kasi Pemerintahan" />
+                            <option value="Kasi Pelayanan" />
+                            <option value="Kepala Dusun 1" />
+                        </datalist>
                     </div>
+                    <p className="text-[10px] text-blue-600 mt-1">
+                        *Gunakan nama baku (Kaur/Kasi) agar struktur otomatis rapi.
+                    </p>
                 </div>
                 <div>
-                    <label className={labelClass}>No. Urut</label>
-                    <div className={inputContainerClass}>
+                    <label className={labelClass}>No. Urut (Kiri-Kanan)</label>
+                    <div className="relative">
                         <ListOrdered className={iconClass} size={18} />
                         <input 
-                        type="number"
-                        value={urutan}
-                        onChange={e => setUrutan(e.target.value)}
-                        className={inputClass}
-                        placeholder="1"
-                        required
+                            type="number"
+                            value={urutan}
+                            onChange={e => setUrutan(e.target.value)}
+                            className={inputClass}
+                            placeholder="1"
+                            required
                         />
                     </div>
-                    <p className="text-xs text-gray-600 font-bold mt-1">*Semakin kecil angka, semakin di atas.</p>
                 </div>
             </div>
           </div>
 
           <div className="space-y-5">
             <div>
-              <label className="block text-sm font-bold text-black mb-2">Foto Profil</label>
+              <label className={labelClass}>Foto Profil</label>
               {!file ? (
                 <div 
                   onDragOver={handleDragOver}
                   onDragLeave={handleDragLeave}
                   onDrop={handleDrop}
                   onClick={() => fileInputRef.current?.click()}
-                  className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-all ${
-                    isDragging ? 'border-green-500 bg-green-50' : 'border-gray-400 hover:bg-gray-50'
+                  className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-all ${
+                    isDragging ? 'border-blue-500 bg-blue-50' : 'border-gray-300 hover:bg-gray-50'
                   }`}
                 >
                   <input type="file" accept="image/*" ref={fileInputRef} onChange={e => setFile(e.target.files?.[0] || null)} className="hidden" />
-                  <UploadCloud className="mx-auto text-gray-500 mb-2" size={32} />
-                  <p className="text-sm text-gray-700 font-medium">Klik atau Drag foto kesini</p>
-                  <p className="text-xs text-red-500 mt-1">*Max 5MB</p>
+                  <UploadCloud className="mx-auto text-gray-400 mb-2" size={32} />
+                  <p className="text-sm text-gray-600">Klik atau Drag foto kesini</p>
+                  <p className="text-xs text-red-500 mt-1">*Max 2MB</p>
                 </div>
               ) : (
-                <div className="flex items-center gap-3 p-3 bg-white border border-gray-300 rounded-lg shadow-sm">
-                  <ImageIcon className="text-green-600" />
+                <div className="flex items-center gap-3 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                  <ImageIcon className="text-blue-600" />
                   <span className="text-sm font-medium text-black truncate flex-1">{file.name}</span>
-                  <button type="button" onClick={removeFile}><X size={18} className="text-red-600 hover:scale-110 transition-transform" /></button>
+                  <button type="button" onClick={removeFile} className="p-1 hover:bg-red-100 rounded-full text-red-500 transition-colors">
+                      <X size={18} />
+                  </button>
                 </div>
               )}
             </div>
@@ -232,49 +232,64 @@ export default function AdminPerangkatPage() {
             <button 
               disabled={uploading}
               type="submit" 
-              className={`w-full bg-green-700 text-white px-4 py-3 rounded-lg hover:bg-green-800 flex items-center justify-center gap-2 font-bold mt-2 shadow-md transition-transform active:scale-95 ${uploading ? 'opacity-50 cursor-not-allowed' : ''}`}
+              className={`w-full bg-blue-600 text-white px-4 py-3 rounded-lg hover:bg-blue-700 flex items-center justify-center gap-2 font-bold shadow-sm transition-all ${uploading ? 'opacity-70 cursor-not-allowed' : 'hover:-translate-y-0.5'}`}
             >
               {uploading ? <Loader2 className="animate-spin" /> : <Plus size={20} />}
-              {uploading ? 'Menyimpan...' : 'Simpan Anggota'}
+              {uploading ? 'Menyimpan...' : 'Simpan Data'}
             </button>
           </div>
         </form>
       </div>
 
-      <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+      {/* --- LIST DATA --- */}
+      <div className="grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
         {data.map((item) => (
-          <div key={item.id} className={`bg-white rounded-xl shadow-md overflow-hidden border flex flex-col items-center p-6 transition-all hover:-translate-y-1 ${item.status === 'aktif' ? 'border-gray-200' : 'border-gray-200 opacity-75 bg-gray-50'}`}>
-            <div className="relative w-24 h-24 rounded-full overflow-hidden bg-gray-100 mb-4 border-4 border-gray-100 shadow-sm">
+          <div key={item.id} className={`bg-white rounded-xl shadow-sm border p-5 flex flex-col items-center transition-all ${item.status === 'aktif' ? 'border-gray-200' : 'border-red-200 bg-red-50 opacity-75'}`}>
+            
+            <div className="relative w-20 h-20 rounded-full overflow-hidden bg-gray-100 mb-3 border border-gray-100">
               {item.foto_url ? (
                 <Image src={item.foto_url} alt={item.nama_lengkap} fill className="object-cover" />
-              ) : <div className="h-full flex items-center justify-center"><User className="text-gray-400" size={32} /></div>}
+              ) : <User className="w-full h-full p-4 text-gray-400" />}
             </div>
             
-            <div className="text-center w-full">
-                <span className="inline-block bg-gray-200 text-black font-bold text-xs px-2.5 py-1 rounded-full mb-2">
-                    Urutan: {item.urutan}
-                </span>
-                <h3 className="font-bold text-lg text-black line-clamp-1">{item.nama_lengkap}</h3>
-                <p className="text-green-700 font-bold text-sm mb-4">{item.jabatan}</p>
-                
-                <div className="pt-4 border-t border-gray-200 w-full flex justify-between items-center gap-2">
-                    <button 
-                        onClick={() => toggleStatus(item.id, item.status)}
-                        className={`flex-1 text-xs font-bold py-2 rounded-lg transition-colors ${item.status === 'aktif' ? 'bg-red-50 text-red-700 hover:bg-red-100' : 'bg-green-50 text-green-700 hover:bg-green-100'}`}
-                    >
-                        {item.status === 'aktif' ? 'Non-aktifkan' : 'Aktifkan'}
-                    </button>
-                    <button 
-                    onClick={() => handleDelete(item.id)}
-                    className="text-gray-500 hover:text-red-600 p-2 rounded-lg hover:bg-red-50 transition-colors"
-                    title="Hapus"
-                    >
-                    <Trash2 size={18} />
-                    </button>
+            <div className="text-center w-full mb-4">
+                <div className="flex justify-center items-center gap-2 mb-1">
+                    <span className="bg-gray-100 text-gray-600 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                        Urut: {item.urutan}
+                    </span>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${item.status === 'aktif' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                        {item.status === 'aktif' ? 'Aktif' : 'Non-Aktif'}
+                    </span>
                 </div>
+                <h3 className="font-bold text-gray-800 line-clamp-1">{item.nama_lengkap}</h3>
+                <p className="text-blue-600 text-sm font-medium">{item.jabatan}</p>
+            </div>
+            
+            <div className="mt-auto w-full flex gap-2 pt-3 border-t border-gray-100">
+                <button 
+                    onClick={() => toggleStatus(item.id, item.status)}
+                    className={`flex-1 flex items-center justify-center gap-1 text-xs font-bold py-2 rounded-lg transition-colors ${item.status === 'aktif' ? 'bg-red-50 text-red-600 hover:bg-red-100' : 'bg-green-50 text-green-600 hover:bg-green-100'}`}
+                >
+                    {item.status === 'aktif' ? <XCircle size={14} /> : <CheckCircle size={14} />}
+                    {item.status === 'aktif' ? 'Non-aktifkan' : 'Aktifkan'}
+                </button>
+                <button 
+                    onClick={() => handleDelete(item.id)}
+                    className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                    title="Hapus Permanen"
+                >
+                    <Trash2 size={18} />
+                </button>
             </div>
           </div>
         ))}
+        
+        {data.length === 0 && !loading && (
+            <div className="col-span-full py-10 text-center text-gray-400">
+                <User size={48} className="mx-auto mb-2 opacity-20" />
+                <p>Belum ada data perangkat desa.</p>
+            </div>
+        )}
       </div>
     </div>
   )

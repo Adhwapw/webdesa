@@ -1,7 +1,9 @@
 import { supabase } from "@/lib/supabase";
 import { UMKM } from "@/types";
 import Image from "next/image";
-import { Store, User, Phone, ImageOff } from "lucide-react";
+import { Store, User, ImageOff } from "lucide-react";
+import Link from "next/link"; // Import Link
+import { stripHtml } from "@/lib/utils"; // Import stripHtml
 
 export const revalidate = 60;
 
@@ -39,55 +41,57 @@ export default async function UMKMPage() {
         {umkm.length > 0 ? (
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
             {umkm.map((item) => (
-              <div
+              <Link
+                href={`/umkm/${item.id}`}
                 key={item.id}
-                className="bg-white rounded-xl shadow-lg overflow-hidden hover:shadow-xl transition-shadow duration-300 flex flex-col"
+                className="block group"
               >
-                <div className="relative h-56 bg-gray-200 group">
-                  {item.foto_url ? (
-                    <Image
-                      src={item.foto_url}
-                      alt={item.nama_umkm}
-                      fill
-                      className="object-cover transition-transform duration-500 group-hover:scale-105"
-                    />
-                  ) : (
-                    <div className="flex items-center justify-center h-full text-gray-400">
-                      <ImageOff size={48} />
-                    </div>
-                  )}
-                  {item.kategori && (
-                    <div className="absolute top-4 right-4 bg-orange-600 text-white px-3 py-1 rounded-full text-xs font-semibold shadow-md">
-                      {item.kategori}
-                    </div>
-                  )}
-                </div>
-
-                <div className="p-6 flex-1 flex flex-col">
-                  <h3 className="text-xl font-bold text-gray-800 mb-2">
-                    {item.nama_umkm}
-                  </h3>
+                <div className="bg-white rounded-xl shadow-lg overflow-hidden hover:shadow-xl transition-all duration-300 h-full flex flex-col hover:-translate-y-1">
                   
-                  <div className="flex items-center text-sm text-gray-500 mb-4">
-                    <User size={16} className="mr-2 text-orange-500" />
-                    Pemilik: {item.pemilik}
+                  {/* Gambar */}
+                  <div className="relative h-56 bg-gray-200 group">
+                    {item.foto_url ? (
+                      <Image
+                        src={item.foto_url}
+                        alt={item.nama_umkm}
+                        fill
+                        className="object-cover transition-transform duration-500 group-hover:scale-105"
+                      />
+                    ) : (
+                      <div className="flex items-center justify-center h-full text-gray-400">
+                        <ImageOff size={48} />
+                      </div>
+                    )}
+                    {item.kategori && (
+                      <div className="absolute top-4 right-4 bg-orange-600 text-white px-3 py-1 rounded-full text-xs font-semibold shadow-md">
+                        {item.kategori}
+                      </div>
+                    )}
                   </div>
 
-                  <p className="text-gray-600 text-sm leading-relaxed mb-6 flex-1">
-                    {item.deskripsi}
-                  </p>
+                  {/* Konten */}
+                  <div className="p-6 flex flex-col flex-1">
+                    <h3 className="text-xl font-bold text-gray-800 mb-2 group-hover:text-orange-700 transition-colors">
+                      {item.nama_umkm}
+                    </h3>
+                    
+                    <div className="flex items-center text-sm text-gray-500 mb-4">
+                      <User size={16} className="mr-2 text-orange-500" />
+                      Pemilik: {item.pemilik}
+                    </div>
 
-                  <a
-                    href={`https://wa.me/${item.kontak?.replace(/^0/, "62")}`} // Auto convert 08xx ke 628xx
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="w-full bg-green-600 text-white py-3 rounded-lg font-semibold hover:bg-green-700 transition flex items-center justify-center gap-2"
-                  >
-                    <Phone size={18} />
-                    Hubungi Penjual
-                  </a>
+                    {/* Deskripsi dipotong 8 kata */}
+                    <p className="text-gray-600 text-sm leading-relaxed mb-6 flex-1">
+                      {stripHtml(item.deskripsi, 8)}
+                    </p>
+
+                    {/* Footer "Baca Selengkapnya" (Menggantikan tombol WA agar tidak nested link) */}
+                    <div className="mt-auto pt-4 border-t border-gray-100 text-orange-600 font-bold text-sm flex items-center gap-1 group-hover:gap-2 transition-all">
+                      Lihat Detail Produk <span className="text-lg">→</span>
+                    </div>
+                  </div>
                 </div>
-              </div>
+              </Link>
             ))}
           </div>
         ) : (

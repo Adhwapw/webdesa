@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, FormEvent, useRef } from 'react'
+import { stripHtml } from '@/lib/utils'
 import { supabase } from '@/lib/supabase'
 import { Potensi } from '@/types'
 import { Loader2, Plus, Trash2, MapPin, Image as ImageIcon, Type, UploadCloud, X, Tag } from 'lucide-react'
@@ -45,16 +46,6 @@ export default function AdminPotensiPage() {
         } finally {
             setLoading(false)
         }
-    }
-
-    const stripHtml = (html: string) => {
-        if (!html) return ''
-        // 1. Ganti &nbsp; dengan spasi biasa
-        let text = html.replace(/&nbsp;/g, ' ')
-        // 2. Hapus semua tag HTML
-        text = text.replace(/<[^>]*>?/gm, '')
-        // 3. Trim spasi berlebih
-        return text.trim()
     }
 
     const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); setIsDragging(true) }
@@ -314,7 +305,7 @@ export default function AdminPotensiPage() {
                             <div className="flex items-center text-xs text-gray-500 mb-2">
                                 <MapPin size={12} className="mr-1" /> {item.lokasi}
                             </div>
-                            <p className="text-gray-500 text-sm line-clamp-2 mb-4 h-10">{stripHtml(item.deskripsi)}</p>
+                            <p className="text-gray-500 text-sm line-clamp-2 mb-4 h-10 whitespace-pre-line">{stripHtml(item.deskripsi,8)}</p>
 
                             <div className="pt-3 border-t flex justify-between items-center">
                                 <button
