@@ -1,33 +1,74 @@
 'use client'
 
-import { useState, useEffect, FormEvent, useRef } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { stripHtml } from '@/lib/utils'
 import { supabase } from '@/lib/supabase'
-import { Dokumentasi } from '@/types'
-import { Loader2, Plus, Trash2, Calendar, Type, Image as ImageIcon, UploadCloud, X, Tag } from 'lucide-react'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import * as z from 'zod'
+import { compressImage } from '@/lib/compression' // Import helper kompresi
+import { Loader2, Plus, Trash2, Calendar, Type, Image as ImageIcon, UploadCloud, X, Tag, Edit2, Save } from 'lucide-react'
 import Image from 'next/image'
 import TextEditor from '@/components/TextEditor'
 import toast from 'react-hot-toast'
-import DeleteModal from '@/components/DeleteModal' // 1. Import Modal
+import DeleteModal from '@/components/DeleteModal'
+
+// --- 1. SKEMA VALIDASI (ZOD) ---
+const dokumentasiSchema = z.object({
+  judul: z.string().min(5, "Judul kegiatan minimal 5 karakter"),
+  tanggal: z.string().min(1, "Tanggal wajib diisi"),
+  kategori: z.string().min(1, "Pilih kategori"),
+  deskripsi: z.string().min(20, "Deskripsi/Artikel minimal 20 karakter"),
+})
+
+type DokumentasiFormValues = z.infer<typeof dokumentasiSchema>
+
+// Tipe Data Database
+interface Dokumentasi extends DokumentasiFormValues {
+  id: number
+  foto_url: string | null
+  created_at?: string
+}
 
 export default function AdminDokumentasiPage() {
   const [data, setData] = useState<Dokumentasi[]>([])
   const [loading, setLoading] = useState(true)
-  const [uploading, setUploading] = useState(false)
-  const [isDragging, setIsDragging] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
-  // 2. State untuk Modal Delete
-  const [isDeleteOpen, setIsDeleteOpen] = useState(false)
-  const [deleteId, setDeleteId] = useState<number | null>(null)
-  const [deleteLoading, setDeleteLoading] = useState(false)
-
-  const [judul, setJudul] = useState('')
-  const [tanggal, setTanggal] = useState('')
-  const [kategori, setKategori] = useState('Kegiatan')
-  const [deskripsi, setDeskripsi] = useState('')
+  // State Edit & Upload
+  const [editingId, setEditingId] = useState<number | null>(null)
   const [file, setFile] = useState<File | null>(null)
-
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // State Modal Hapus
+  const [deleteState, setDeleteState] = useState<{ show: boolean; id: number | null; foto_url: string | null; loading: boolean }>({
+    show: false, id: null, foto_url: null, loading: false
+  })
+
+  // --- 2. SETUP REACT HOOK FORM ---
+  const {
+    register,
+    handleSubmit,
+    setValue,
+    watch,
+    reset,
+    formState: { errors }
+  } = useForm<DokumentasiFormValues>({
+    resolver: zodResolver(dokumentasiSchema),
+    defaultValues: {
+      kategori: 'Kegiatan', // Default value
+      tanggal: new Date().toISOString().split('T')[0] // Default hari ini
+    }
+  })
+
+  // Watch deskripsi agar TextEditor bisa sinkron
+  const deskripsiValue = watch("deskripsi")
+
+  // Register deskripsi manual karena ini custom component (TextEditor)
+  useEffect(() => {
+    register("deskripsi")
+  }, [register])
 
   useEffect(() => {
     fetchData()
@@ -40,7 +81,8 @@ export default function AdminDokumentasiPage() {
         .select('*')
         .order('tanggal', { ascending: false })
 
-      if (data) setData(data as Dokumentasi[])
+      if (error) throw error
+      setData(data as Dokumentasi[])
     } catch (error) {
       toast.error('Gagal memuat data')
     } finally {
@@ -48,266 +90,373 @@ export default function AdminDokumentasiPage() {
     }
   }
 
+  // --- HANDLER FILE DENGAN KOMPRESI ---
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = e.target.files?.[0]
+    if (selectedFile) {
+        // 1. Validasi Awal
+        if (!selectedFile.type.startsWith('image/')) {
+            toast.error('File harus berupa gambar')
+            return
+        }
+        if (selectedFile.size > 10 * 1024 * 1024) { // Limit 10MB sebelum kompresi
+            toast.error('File terlalu besar (Max 10MB)')
+            return
+        }
 
-  const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); setIsDragging(true) }
-  const handleDragLeave = (e: React.DragEvent) => { e.preventDefault(); setIsDragging(false) }
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault(); setIsDragging(false)
-    if (e.dataTransfer.files?.[0]) {
-      const f = e.dataTransfer.files[0]
-      if (f.type.startsWith('image/')) setFile(f)
-      else toast.error('Hanya file gambar!')
+        const toastId = toast.loading('Mengompres gambar...')
+
+        try {
+            // 2. Proses Kompresi
+            const compressed = await compressImage(selectedFile)
+            
+            // 3. Simpan ke State
+            setFile(compressed)
+            setPreviewUrl(URL.createObjectURL(compressed))
+            
+            toast.success(`Kompresi: ${(selectedFile.size/1024).toFixed(0)}KB -> ${(compressed.size/1024).toFixed(0)}KB`, { id: toastId })
+        } catch (error) {
+            toast.error('Gagal memproses gambar', { id: toastId })
+        }
     }
   }
-  const removeFile = () => {
+
+  const clearFile = () => {
     setFile(null)
+    setPreviewUrl(null)
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
-  const handleUpload = async (e: FormEvent) => {
-    e.preventDefault()
+  // --- 3. HANDLER EDIT ---
+  const handleEdit = (item: Dokumentasi) => {
+    setEditingId(item.id)
+    setValue('judul', item.judul)
+    setValue('tanggal', item.tanggal)
+    setValue('kategori', item.kategori)
+    setValue('deskripsi', item.deskripsi) // Isi TextEditor
 
-    if (!file) return toast.error('Pilih foto kegiatan terlebih dahulu')
+    if (item.foto_url) {
+      setPreviewUrl(item.foto_url)
+    } else {
+      setPreviewUrl(null)
+    }
 
-    // Validasi 5MB
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error('Ukuran file terlalu besar! Maksimal 5MB.')
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  const handleCancel = () => {
+    setEditingId(null)
+    reset()
+    clearFile()
+    // Reset default date
+    setValue('tanggal', new Date().toISOString().split('T')[0])
+  }
+
+  // --- 4. SUBMIT HANDLER ---
+  const onSubmit = async (values: DokumentasiFormValues) => {
+    // Validasi Foto: Wajib ada foto jika Mode Tambah Baru
+    if (!editingId && !file) {
+      toast.error('Wajib upload foto kegiatan!')
       return
     }
 
-    if (!file.type.startsWith('image/')) {
-      toast.error('File harus berupa gambar.')
-      return
-    }
-
-    setUploading(true)
-    const toastId = toast.loading('Mempublikasikan berita...')
+    setIsSubmitting(true)
+    const toastId = toast.loading('Menyimpan data...')
 
     try {
-      const fileExt = file.name.split('.').pop()
-      const fileName = `${Date.now()}.${fileExt}`
-      const filePath = `${fileName}`
+      let finalFotoUrl = previewUrl
 
-      const { error: uploadError } = await supabase.storage
-        .from('dokumentasi')
-        .upload(filePath, file)
+      // Upload Foto Baru (File yang sudah dikompres)
+      if (file) {
+        const fileExt = file.name.split('.').pop()
+        const fileName = `${Date.now()}.${fileExt}`
+        const filePath = `${fileName}`
 
-      if (uploadError) throw uploadError
+        const { error: uploadError } = await supabase.storage.from('dokumentasi').upload(filePath, file)
+        if (uploadError) throw uploadError
 
-      const { data: { publicUrl } } = supabase.storage
-        .from('dokumentasi')
-        .getPublicUrl(filePath)
+        const { data: { publicUrl } } = supabase.storage.from('dokumentasi').getPublicUrl(filePath)
+        finalFotoUrl = publicUrl
+      }
 
-      const { error: dbError } = await supabase
-        .from('dokumentasi')
-        .insert([{
-          judul,
-          tanggal,
-          kategori,
-          deskripsi,
-          foto_url: publicUrl,
-          status: 'aktif'
-        }])
+      if (editingId) {
+        // UPDATE
+        const { error } = await supabase
+          .from('dokumentasi')
+          .update({
+            judul: values.judul,
+            tanggal: values.tanggal,
+            kategori: values.kategori,
+            deskripsi: values.deskripsi,
+            foto_url: finalFotoUrl
+          })
+          .eq('id', editingId)
 
-      if (dbError) throw dbError
+        if (error) throw error
+        toast.success('Berita berhasil diperbarui!', { id: toastId })
 
-      setJudul('')
-      setTanggal('')
-      setDeskripsi('')
-      removeFile()
+      } else {
+        // INSERT
+        const { error } = await supabase
+          .from('dokumentasi')
+          .insert([{
+            judul: values.judul,
+            tanggal: values.tanggal,
+            kategori: values.kategori,
+            deskripsi: values.deskripsi,
+            foto_url: finalFotoUrl,
+            status: 'aktif'
+          }])
+
+        if (error) throw error
+        toast.success('Berita berhasil dipublikasikan!', { id: toastId })
+      }
+
+      handleCancel()
       fetchData()
-
-      toast.dismiss(toastId)
-      toast.success('Berita berhasil dipublikasikan!')
 
     } catch (error) {
-      console.error('Error:', error)
-      toast.dismiss(toastId)
-      toast.error('Gagal mempublikasikan berita.')
+      console.error(error)
+      toast.error('Gagal menyimpan data.', { id: toastId })
     } finally {
-      setUploading(false)
+      setIsSubmitting(false)
     }
   }
 
-  // 3. Logic Hapus dengan Modal
-  const openDeleteModal = (id: number) => {
-    setDeleteId(id)
-    setIsDeleteOpen(true)
+  // --- DELETE LOGIC ---
+  const confirmDelete = (id: number, foto_url: string | null) => {
+    setDeleteState({ show: true, id, foto_url, loading: false })
   }
 
-  const confirmDelete = async () => {
-    if (!deleteId) return
+  const handleDelete = async () => {
+    if (!deleteState.id) return
+    setDeleteState(prev => ({ ...prev, loading: true }))
 
-    setDeleteLoading(true)
     try {
-      await supabase.from('dokumentasi').delete().eq('id', deleteId)
-      fetchData()
+      if (deleteState.foto_url) {
+        const fileName = deleteState.foto_url.split('/').pop()
+        if (fileName) await supabase.storage.from('dokumentasi').remove([fileName])
+      }
+      await supabase.from('dokumentasi').delete().eq('id', deleteState.id)
+
       toast.success('Data berhasil dihapus')
-      setIsDeleteOpen(false) // Tutup modal setelah berhasil
+      fetchData()
+      setDeleteState({ show: false, id: null, foto_url: null, loading: false })
     } catch (error) {
       toast.error('Gagal menghapus data')
-    } finally {
-      setDeleteLoading(false)
+      setDeleteState(prev => ({ ...prev, loading: false }))
     }
   }
 
-  const labelClass = "block text-sm font-bold text-black mb-2"
+  // Styles
+  const labelClass = "block text-sm font-bold text-gray-700 mb-2"
   const inputContainerClass = "relative"
-  const iconClass = "absolute left-3 top-3 text-gray-600"
-  const inputClass = "w-full pl-10 pr-4 py-2.5 border border-gray-400 rounded-lg bg-white text-black placeholder:text-gray-600 focus:outline-none focus:ring-2 focus:ring-green-500 font-medium transition-all"
+  const iconClass = "absolute left-3 top-3 text-gray-500"
+  const inputClass = "w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg bg-white text-black placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500 font-medium transition-all"
+  const errorClass = "text-red-500 text-xs mt-1 font-medium"
 
   return (
     <div>
-      {/* 4. Pasang Komponen Modal */}
-      <DeleteModal
-        isOpen={isDeleteOpen}
-        onClose={() => setIsDeleteOpen(false)}
-        onConfirm={confirmDelete}
-        loading={deleteLoading}
-      />
+      <h1 className="text-2xl font-bold text-gray-800 mb-6">Kelola Dokumentasi & Berita</h1>
 
-      <h1 className="text-2xl font-bold text-black mb-6">Kelola Dokumentasi & Berita</h1>
-
-      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 mb-8">
-        <h2 className="text-lg font-bold text-black mb-6 flex items-center gap-2 border-b pb-2">
-          <Plus size={20} className="text-green-700" /> Tambah Kegiatan Baru
+      {/* --- FORM CARD --- */}
+      <div className={`bg-white p-6 rounded-xl shadow-sm border mb-8 transition-all ${editingId ? 'border-orange-200 ring-2 ring-orange-100' : 'border-gray-200'}`}>
+        <h2 className="text-lg font-bold text-gray-800 mb-6 flex items-center gap-2 border-b pb-2">
+          {editingId ? <Edit2 size={20} className="text-orange-600" /> : <Plus size={20} className="text-green-700" />}
+          {editingId ? 'Edit Kegiatan/Berita' : 'Tambah Kegiatan Baru'}
         </h2>
 
-        <form onSubmit={handleUpload} className="grid md:grid-cols-2 gap-8">
-
+        <form onSubmit={handleSubmit(onSubmit)} className="grid md:grid-cols-2 gap-8">
           <div className="space-y-5">
+            {/* Judul */}
             <div>
               <label className={labelClass}>Judul Kegiatan</label>
               <div className={inputContainerClass}>
                 <Type className={iconClass} size={18} />
                 <input
+                  {...register('judul')}
                   type="text"
-                  value={judul}
-                  onChange={e => setJudul(e.target.value)}
                   className={inputClass}
                   placeholder="Contoh: Kerja Bakti Desa"
-                  required
                 />
               </div>
+              {errors.judul && <p className={errorClass}>{errors.judul.message}</p>}
             </div>
 
             <div className="grid grid-cols-2 gap-4">
+              {/* Tanggal */}
               <div>
                 <label className={labelClass}>Tanggal</label>
                 <div className={inputContainerClass}>
                   <Calendar className={iconClass} size={18} />
                   <input
+                    {...register('tanggal')}
                     type="date"
-                    value={tanggal}
-                    onChange={e => setTanggal(e.target.value)}
                     className={inputClass}
-                    required
                   />
                 </div>
+                {errors.tanggal && <p className={errorClass}>{errors.tanggal.message}</p>}
               </div>
+              
+              {/* Kategori */}
               <div>
                 <label className={labelClass}>Kategori</label>
                 <div className={inputContainerClass}>
                   <Tag className={iconClass} size={18} />
-                  <select
-                    value={kategori}
-                    onChange={e => setKategori(e.target.value)}
-                    className={inputClass}
-                  >
+                  <select {...register('kategori')} className={inputClass}>
                     <option value="Kegiatan">Kegiatan</option>
                     <option value="Berita">Berita</option>
                     <option value="Pembangunan">Pembangunan</option>
                     <option value="Pengumuman">Pengumuman</option>
                   </select>
                 </div>
+                {errors.kategori && <p className={errorClass}>{errors.kategori.message}</p>}
               </div>
             </div>
 
+            {/* Foto Upload */}
             <div>
               <label className={labelClass}>Foto Kegiatan</label>
-              {!file ? (
+              {!previewUrl ? (
                 <div
-                  onDragOver={handleDragOver}
-                  onDragLeave={handleDragLeave}
-                  onDrop={handleDrop}
                   onClick={() => fileInputRef.current?.click()}
-                  className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-all ${isDragging ? 'border-green-500 bg-green-50' : 'border-gray-400 hover:bg-gray-50'
-                    }`}
+                  className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center cursor-pointer hover:bg-gray-50 transition-colors"
                 >
-                  <input type="file" accept="image/*" ref={fileInputRef} onChange={e => setFile(e.target.files?.[0] || null)} className="hidden" />
-                  <UploadCloud className="mx-auto text-gray-500 mb-2" size={32} />
-                  <p className="text-sm text-gray-700 font-medium">Klik atau Drag foto kesini</p>
-                  <p className="text-xs text-red-500 mt-1 font-bold">*Maksimal 5MB</p>
+                  <UploadCloud className="mx-auto text-gray-400 mb-2" size={32} />
+                  <p className="text-sm text-gray-600 font-medium">Klik untuk upload foto</p>
+                  <p className="text-xs text-green-600 font-bold mt-1">Otomatis dikompres &lt; 500KB</p>
                 </div>
               ) : (
-                <div className="flex items-center gap-3 p-3 bg-white border border-gray-300 rounded-lg shadow-sm">
-                  <ImageIcon className="text-green-600" />
-                  <span className="text-sm font-medium text-black truncate flex-1">{file.name}</span>
-                  <button type="button" onClick={removeFile}><X size={18} className="text-red-600 hover:scale-110 transition-transform" /></button>
+                <div className="relative rounded-lg overflow-hidden border border-gray-200 h-48 w-full group bg-gray-50">
+                  <Image 
+                    src={previewUrl} 
+                    alt="Preview" 
+                    fill 
+                    className="object-cover"
+                    unoptimized // Penting agar blob preview tidak error
+                  />
+                  <button
+                    type="button"
+                    onClick={clearFile}
+                    className="absolute top-2 right-2 bg-red-600 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    <X size={16} />
+                  </button>
                 </div>
               )}
+              <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept="image/*" />
             </div>
           </div>
 
           <div className="flex flex-col h-full">
-            <label className={labelClass}>Isi Artikel / Deskripsi Lengkap</label>
-            <div className="flex-1">
-              <TextEditor
-                value={deskripsi}
-                onChange={setDeskripsi}
-              />
+            {/* Text Editor (Rich Text) */}
+            <div className="flex-1 flex flex-col">
+              <label className={labelClass}>Isi Artikel / Deskripsi Lengkap</label>
+              <div className="flex-1 min-h-[300px]">
+                <TextEditor
+                  value={deskripsiValue || ''}
+                  onChange={(val) => setValue("deskripsi", val, { shouldValidate: true })}
+                />
+              </div>
+              {errors.deskripsi && <p className={errorClass}>{errors.deskripsi.message}</p>}
             </div>
 
-            <button
-              disabled={uploading}
-              type="submit"
-              className={`w-full bg-green-700 text-white px-4 py-3 rounded-lg hover:bg-green-800 flex items-center justify-center gap-2 font-bold mt-4 shadow-md transition-transform active:scale-95 ${uploading ? 'opacity-50 cursor-not-allowed' : ''}`}
-            >
-              {uploading ? <Loader2 className="animate-spin" /> : <Plus size={20} />}
-              {uploading ? 'Mengupload...' : 'Publikasikan Berita'}
-            </button>
+            {/* Action Buttons */}
+            <div className="flex gap-3 mt-6">
+              <button
+                disabled={isSubmitting}
+                type="submit"
+                className={`flex-1 px-4 py-3 rounded-lg flex items-center justify-center gap-2 font-bold shadow-md transition-transform active:scale-95 text-white ${editingId ? 'bg-orange-600 hover:bg-orange-700' : 'bg-green-700 hover:bg-green-800'} ${isSubmitting ? 'opacity-70 cursor-not-allowed' : ''}`}
+              >
+                {isSubmitting ? <Loader2 className="animate-spin" /> : (editingId ? <Save size={20} /> : <Plus size={20} />)}
+                {isSubmitting ? 'Menyimpan...' : (editingId ? 'Simpan Perubahan' : 'Publikasikan Berita')}
+              </button>
+
+              {editingId && (
+                <button
+                  type="button"
+                  onClick={handleCancel}
+                  className="px-6 py-3 bg-gray-100 text-gray-600 rounded-lg font-bold hover:bg-gray-200 transition-colors"
+                >
+                  Batal
+                </button>
+              )}
+            </div>
           </div>
         </form>
       </div>
 
-      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {data.map((item) => (
-          <div key={item.id} className="bg-white rounded-xl shadow-md overflow-hidden border border-gray-200 flex flex-col hover:shadow-lg transition-shadow">
-            <div className="relative h-48 w-full bg-gray-100 border-b border-gray-100">
-              {item.foto_url ? (
-                <Image src={item.foto_url} alt={item.judul} fill className="object-cover" />
-              ) : <div className="h-full flex items-center justify-center"><ImageIcon className="text-gray-400" /></div>}
+      {/* --- LIST DATA --- */}
+      {loading ? (
+        <div className="flex justify-center py-10"><Loader2 className="animate-spin text-green-600" size={32} /></div>
+      ) : (
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {data.map((item) => (
+            <div key={item.id} className="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-200 flex flex-col hover:shadow-md transition-shadow group">
+              <div className="relative h-48 w-full bg-gray-100 border-b border-gray-100 overflow-hidden">
+                {item.foto_url ? (
+                  <Image
+                    src={item.foto_url}
+                    alt={item.judul}
+                    fill
+                    className="object-cover transition-transform duration-500 group-hover:scale-110"
+                    sizes="(max-width: 768px) 100vw, 33vw"
+                  />
+                ) : <div className="h-full flex items-center justify-center"><ImageIcon className="text-gray-400" /></div>}
 
-              <div className="absolute top-2 right-2 bg-white/90 px-2 py-1 rounded text-xs font-bold text-gray-700 shadow-sm">
-                {new Date(item.tanggal).toLocaleDateString('id-ID')}
+                <div className="absolute top-2 right-2 bg-black/50 backdrop-blur-sm px-2 py-1 rounded text-xs font-bold text-white shadow-sm">
+                  {new Date(item.tanggal).toLocaleDateString('id-ID')}
+                </div>
+              </div>
+
+              <div className="p-5 flex-1 flex flex-col">
+                <div className="mb-auto">
+                  <span className="inline-block bg-green-50 text-green-700 text-xs font-bold px-2 py-1 rounded mb-2 border border-green-100">
+                    {item.kategori}
+                  </span>
+                  <h3 className="font-bold text-lg text-gray-800 mb-2 line-clamp-2 leading-tight">{item.judul}</h3>
+
+                  <p className="text-sm text-gray-500 line-clamp-2 whitespace-pre-line">
+                    {stripHtml(item.deskripsi).substring(0, 100)}...
+                  </p>
+                </div>
+
+                <div className="pt-4 border-t border-gray-100 mt-4 flex gap-2">
+                  <button
+                    onClick={() => handleEdit(item)}
+                    className="flex-1 flex items-center justify-center gap-1 text-blue-600 bg-blue-50 hover:bg-blue-100 text-sm font-bold py-2 rounded-lg transition-colors"
+                  >
+                    <Edit2 size={16} /> Edit
+                  </button>
+                  <button
+                    onClick={() => confirmDelete(item.id, item.foto_url)}
+                    className="flex items-center justify-center gap-1 text-red-600 bg-red-50 hover:bg-red-100 text-sm font-bold px-3 py-2 rounded-lg transition-colors"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
               </div>
             </div>
+          ))}
 
-            <div className="p-5 flex-1 flex flex-col">
-              <div className="mb-auto">
-                <span className="inline-block bg-green-50 text-green-700 text-xs font-bold px-2 py-1 rounded mb-2">
-                  {item.kategori}
-                </span>
-                <h3 className="font-bold text-lg text-black mb-2 line-clamp-2">{item.judul}</h3>
-
-                <p className="text-sm text-gray-600 line-clamp-2 whitespace-pre-line">
-                  {stripHtml(item.deskripsi,8)}
-                </p>
-              </div>
-
-              <div className="pt-4 border-t border-gray-100 mt-4 flex justify-end">
-                {/* 5. Ubah tombol Hapus untuk memanggil openDeleteModal */}
-                <button
-                  onClick={() => openDeleteModal(item.id)}
-                  className="flex items-center gap-1 text-gray-500 hover:text-red-600 text-sm font-medium transition-colors p-2 hover:bg-red-50 rounded"
-                >
-                  <Trash2 size={16} /> Hapus
-                </button>
-              </div>
+          {data.length === 0 && (
+            <div className="col-span-full py-12 text-center text-gray-400 border border-dashed border-gray-300 rounded-xl">
+              <ImageIcon size={48} className="mx-auto mb-2 opacity-20" />
+              <p>Belum ada dokumentasi kegiatan.</p>
             </div>
-          </div>
-        ))}
-      </div>
+          )}
+        </div>
+      )}
+
+      {/* MODAL HAPUS */}
+      <DeleteModal
+        isOpen={deleteState.show}
+        onClose={() => setDeleteState(prev => ({ ...prev, show: false }))}
+        onConfirm={handleDelete}
+        loading={deleteState.loading}
+        title="Hapus Kegiatan?"
+        message="Berita kegiatan ini akan dihapus permanen."
+      />
     </div>
   )
 }

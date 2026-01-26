@@ -1,33 +1,62 @@
 'use client'
 
-import { useState, useEffect, FormEvent, useRef } from 'react'
-import { stripHtml } from '@/lib/utils'
+import { useState, useEffect, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
-import { Potensi } from '@/types'
-import { Loader2, Plus, Trash2, MapPin, Image as ImageIcon, Type, UploadCloud, X, Tag } from 'lucide-react'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import * as z from 'zod'
+import { Loader2, Plus, Save, Trash2, Edit2, MapPin, UploadCloud, X, Mountain, Tag } from 'lucide-react'
 import Image from 'next/image'
-import TextEditor from '@/components/TextEditor'
-import toast from 'react-hot-toast'
+import { toast } from 'react-hot-toast'
 import DeleteModal from '@/components/DeleteModal'
+
+// --- PENTING: IMPORT LIBRARY KOMPRESI ---
+import imageCompression from 'browser-image-compression'
+
+// --- 1. SKEMA VALIDASI (ZOD) ---
+// Perubahan: 'judul' diganti jadi 'nama' sesuai database
+const potensiSchema = z.object({
+    nama: z.string().min(3, "Nama potensi minimal 3 karakter"), 
+    kategori: z.string().min(1, "Pilih kategori potensi"),
+    deskripsi: z.string().min(20, "Deskripsi terlalu pendek (min 20 karakter)"),
+    lokasi: z.string().optional(),
+})
+
+type PotensiFormValues = z.infer<typeof potensiSchema>
+
+interface Potensi extends PotensiFormValues {
+    id: number
+    foto_url: string | null
+    created_at?: string
+}
 
 export default function AdminPotensiPage() {
     const [data, setData] = useState<Potensi[]>([])
     const [loading, setLoading] = useState(true)
-    const [uploading, setUploading] = useState(false)
-    const [isDragging, setIsDragging] = useState(false)
+    const [isSubmitting, setIsSubmitting] = useState(false)
+    const [compressionProgress, setCompressionProgress] = useState(false)
 
-    // State Modal Delete
-    const [isDeleteOpen, setIsDeleteOpen] = useState(false)
-    const [deleteId, setDeleteId] = useState<number | null>(null)
-    const [deleteLoading, setDeleteLoading] = useState(false)
-
-    const [nama, setNama] = useState('')
-    const [deskripsi, setDeskripsi] = useState('')
-    const [lokasi, setLokasi] = useState('')
-    const [kategori, setKategori] = useState('Wisata')
+    // State Edit & Upload
+    const [editingId, setEditingId] = useState<number | null>(null)
     const [file, setFile] = useState<File | null>(null)
-
+    const [previewUrl, setPreviewUrl] = useState<string | null>(null)
     const fileInputRef = useRef<HTMLInputElement>(null)
+
+    // State Modal Hapus
+    const [deleteState, setDeleteState] = useState<{ show: boolean; id: number | null; foto_url: string | null; loading: boolean }>({
+        show: false, id: null, foto_url: null, loading: false
+    })
+
+    // --- 2. SETUP REACT HOOK FORM ---
+    const {
+        register,
+        handleSubmit,
+        reset,
+        setValue,
+        formState: { errors }
+    } = useForm<PotensiFormValues>({
+        resolver: zodResolver(potensiSchema),
+    })
 
     useEffect(() => {
         fetchData()
@@ -35,12 +64,9 @@ export default function AdminPotensiPage() {
 
     const fetchData = async () => {
         try {
-            const { data, error } = await supabase
-                .from('potensi')
-                .select('*')
-                .order('id', { ascending: false })
-
-            if (data) setData(data as Potensi[])
+            const { data, error } = await supabase.from('potensi').select('*').order('id', { ascending: false })
+            if (error) throw error
+            setData(data as Potensi[])
         } catch (error) {
             toast.error('Gagal memuat data potensi')
         } finally {
@@ -48,284 +74,331 @@ export default function AdminPotensiPage() {
         }
     }
 
-    const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); setIsDragging(true) }
-    const handleDragLeave = (e: React.DragEvent) => { e.preventDefault(); setIsDragging(false) }
-    const handleDrop = (e: React.DragEvent) => {
-        e.preventDefault(); setIsDragging(false)
-        if (e.dataTransfer.files?.[0]) {
-            const f = e.dataTransfer.files[0]
-            if (f.type.startsWith('image/')) setFile(f)
-            else toast.error('Hanya file gambar!')
+    // --- HANDLER FILE ---
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const selectedFile = e.target.files?.[0]
+        if (selectedFile) {
+            if (selectedFile.size > 20 * 1024 * 1024) {
+                toast.error('Ukuran file terlalu besar (Maks 20MB)')
+                return
+            }
+            setFile(selectedFile)
+            setPreviewUrl(URL.createObjectURL(selectedFile))
         }
     }
-    const removeFile = () => {
+
+    const clearFile = () => {
         setFile(null)
+        setPreviewUrl(null)
         if (fileInputRef.current) fileInputRef.current.value = ''
     }
 
-    const handleUpload = async (e: FormEvent) => {
-        e.preventDefault()
+    // --- 3. FITUR EDIT ---
+    const handleEdit = (item: Potensi) => {
+        setEditingId(item.id)
+        // Perubahan: set nilai 'nama' bukan 'judul'
+        setValue('nama', item.nama) 
+        setValue('kategori', item.kategori)
+        setValue('deskripsi', item.deskripsi)
+        setValue('lokasi', item.lokasi || '')
 
-        if (!file) return toast.error('Pilih foto terlebih dahulu')
-
-        // Validasi 5MB
-        if (file.size > 5 * 1024 * 1024) {
-            toast.error('File terlalu besar (Max 5MB).')
-            return
+        if (item.foto_url) {
+            setPreviewUrl(item.foto_url)
+        } else {
+            setPreviewUrl(null)
         }
 
-        if (!file.type.startsWith('image/')) {
-            toast.error('Hanya boleh mengupload file gambar.')
-            return
-        }
-
-        setUploading(true)
-        const toastId = toast.loading('Menyimpan potensi...')
-
-        try {
-            const fileExt = file.name.split('.').pop()
-            const fileName = `${Date.now()}.${fileExt}`
-            const filePath = `${fileName}`
-
-            const { error: uploadError } = await supabase.storage
-                .from('potensi')
-                .upload(filePath, file)
-
-            if (uploadError) throw uploadError
-
-            const { data: { publicUrl } } = supabase.storage
-                .from('potensi')
-                .getPublicUrl(filePath)
-
-            const { error: dbError } = await supabase
-                .from('potensi')
-                .insert([{
-                    nama,
-                    deskripsi,
-                    lokasi,
-                    kategori,
-                    foto_url: publicUrl,
-                    status: 'aktif'
-                }])
-
-            if (dbError) throw dbError
-
-            setNama(''); setDeskripsi(''); setLokasi('');
-            removeFile();
-            fetchData();
-
-            toast.dismiss(toastId)
-            toast.success('Potensi berhasil ditambahkan!')
-
-        } catch (error) {
-            console.error('Error:', error)
-            toast.dismiss(toastId)
-            toast.error('Gagal menyimpan data.')
-        } finally {
-            setUploading(false)
-        }
+        window.scrollTo({ top: 0, behavior: 'smooth' })
     }
 
-    // Modal Logic
-    const openDeleteModal = (id: number) => {
-        setDeleteId(id)
-        setIsDeleteOpen(true)
+    const handleCancel = () => {
+        setEditingId(null)
+        reset()
+        clearFile()
     }
 
-    const confirmDelete = async () => {
-        if (!deleteId) return
-        setDeleteLoading(true)
+    // --- 4. SUBMIT HANDLER ---
+    const onSubmit = async (values: PotensiFormValues) => {
+        setIsSubmitting(true)
+
         try {
-            await supabase.from('potensi').delete().eq('id', deleteId)
+            let finalFotoUrl = previewUrl
+
+            // Kompresi & Upload Foto
+            if (file) {
+                const options = {
+                    maxSizeMB: 0.8,
+                    maxWidthOrHeight: 1200,
+                    useWebWorker: true,
+                    initialQuality: 0.7
+                }
+
+                setCompressionProgress(true)
+                const compressedFile = await imageCompression(file, options)
+                setCompressionProgress(false)
+
+                const fileExt = file.name.split('.').pop()
+                const fileName = `${Date.now()}.${fileExt}`
+                const filePath = `${fileName}`
+
+                // Upload ke bucket 'potensi'
+                const { error: uploadError } = await supabase.storage.from('potensi').upload(filePath, compressedFile)
+                
+                if (uploadError) throw uploadError
+
+                const { data: { publicUrl } } = supabase.storage.from('potensi').getPublicUrl(filePath)
+                finalFotoUrl = publicUrl
+            }
+
+            // Simpan ke Database (Kolom 'nama' otomatis terisi dari values)
+            if (editingId) {
+                const { error } = await supabase
+                    .from('potensi')
+                    .update({ ...values, foto_url: finalFotoUrl })
+                    .eq('id', editingId)
+
+                if (error) throw error
+                toast.success('Potensi berhasil diperbarui!')
+            } else {
+                const { error } = await supabase
+                    .from('potensi')
+                    .insert([{ ...values, foto_url: finalFotoUrl }])
+
+                if (error) throw error
+                toast.success('Potensi baru ditambahkan!')
+            }
+
+            handleCancel()
             fetchData()
+
+        } catch (error: any) {
+            console.error("FULL ERROR:", error)
+            const message = error.message || error.error_description || "Terjadi kesalahan sistem"
+            toast.error(`Gagal menyimpan: ${message}`)
+        } finally {
+            setIsSubmitting(false)
+            setCompressionProgress(false)
+        }
+    }
+
+    // --- DELETE LOGIC ---
+    const confirmDelete = (id: number, foto_url: string | null) => {
+        setDeleteState({ show: true, id, foto_url, loading: false })
+    }
+
+    const handleDelete = async () => {
+        if (!deleteState.id) return
+        setDeleteState(prev => ({ ...prev, loading: true }))
+
+        try {
+            if (deleteState.foto_url) {
+                const fileName = deleteState.foto_url.split('/').pop()
+                if (fileName) await supabase.storage.from('potensi').remove([fileName])
+            }
+            await supabase.from('potensi').delete().eq('id', deleteState.id)
+
             toast.success('Data dihapus')
-            setIsDeleteOpen(false)
-        } catch (error) {
-            toast.error('Gagal menghapus data')
-        } finally {
-            setDeleteLoading(false)
-        }
-    }
-
-    const toggleStatus = async (id: number, currentStatus: string) => {
-        const newStatus = currentStatus === 'aktif' ? 'non-aktif' : 'aktif'
-        try {
-            await supabase.from('potensi').update({ status: newStatus }).eq('id', id)
             fetchData()
-            toast.success('Status berhasil diubah')
+            setDeleteState({ show: false, id: null, foto_url: null, loading: false })
         } catch (error) {
-            toast.error('Error updating status')
+            toast.error('Gagal menghapus')
+            setDeleteState(prev => ({ ...prev, loading: false }))
         }
     }
 
     // Styles
-    const labelClass = "block text-sm font-bold text-black mb-2"
-    const inputContainerClass = "relative"
-    const iconClass = "absolute left-3 top-3 text-gray-600"
-    const inputClass = "w-full pl-10 pr-4 py-2.5 border border-gray-400 rounded-lg bg-white text-black placeholder:text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium transition-all"
+    const inputClass = "w-full border border-gray-300 rounded-lg px-4 py-2 text-black bg-white focus:ring-2 focus:ring-green-500 outline-none transition-all"
+    const errorClass = "text-red-500 text-xs mt-1 font-medium"
 
     return (
         <div>
-            <DeleteModal
-                isOpen={isDeleteOpen}
-                onClose={() => setIsDeleteOpen(false)}
-                onConfirm={confirmDelete}
-                loading={deleteLoading}
-            />
+            <h1 className="text-2xl font-bold text-gray-800 mb-6">Kelola Potensi Desa</h1>
 
-            <h1 className="text-2xl font-bold text-blue-600 mb-6">Kelola Potensi Desa</h1>
-
-            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 mb-8">
-                <h2 className="text-lg font-semibold mb-6 flex items-center gap-2 text-green-600 border-b pb-2">
-                    <Plus size={20} /> Tambah Potensi Baru
+            {/* --- FORM CARD --- */}
+            <div className={`bg-white p-6 rounded-xl shadow-sm border mb-8 transition-all ${editingId ? 'border-orange-200 ring-2 ring-orange-100' : 'border-gray-200'}`}>
+                <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2 border-b pb-2">
+                    {editingId ? <Edit2 size={20} className="text-orange-600" /> : <Plus size={20} className="text-green-600" />}
+                    {editingId ? 'Edit Potensi' : 'Tambah Potensi Baru'}
                 </h2>
 
-                {/* --- PERUBAHAN LAYOUT DI SINI --- */}
-                <form onSubmit={handleUpload} className="grid md:grid-cols-2 gap-8">
-
-                    {/* KOLOM KIRI: Inputs & Foto */}
-                    <div className="space-y-5">
+                <form onSubmit={handleSubmit(onSubmit)} className="grid md:grid-cols-2 gap-6">
+                    <div className="space-y-4">
+                        {/* INPUT NAMA (Dulunya Judul) */}
                         <div>
-                            <label className={labelClass}>Nama Potensi</label>
-                            <div className={inputContainerClass}>
-                                <Type className={iconClass} size={18} />
-                                <input
-                                    type="text"
-                                    value={nama}
-                                    onChange={e => setNama(e.target.value)}
-                                    className={inputClass}
-                                    placeholder="Contoh: Air Terjun Curug Indah"
-                                    required
-                                />
-                            </div>
+                            <label className="block text-sm font-bold text-gray-700 mb-1">Nama Potensi</label>
+                            <input {...register('nama')} className={inputClass} placeholder="Contoh: Air Terjun..." />
+                            {errors.nama && <p className={errorClass}>{errors.nama.message}</p>}
                         </div>
 
+                        {/* Kategori */}
                         <div>
-                            <label className={labelClass}>Lokasi</label>
-                            <div className={inputContainerClass}>
-                                <MapPin className={iconClass} size={18} />
-                                <input
-                                    type="text"
-                                    value={lokasi}
-                                    onChange={e => setLokasi(e.target.value)}
-                                    className={inputClass}
-                                    placeholder="Contoh: Dusun 02, RT 05"
-                                    required
-                                />
-                            </div>
-                        </div>
-
-                        <div>
-                            <label className={labelClass}>Kategori</label>
-                            <div className={inputContainerClass}>
-                                <Tag className={iconClass} size={18} />
-                                <select
-                                    value={kategori}
-                                    onChange={e => setKategori(e.target.value)}
-                                    className={inputClass}
-                                >
-                                    <option value="Wisata">Wisata</option>
-                                    <option value="Pertanian">Pertanian</option>
-                                    <option value="Peternakan">Peternakan</option>
-                                    <option value="Budaya">Seni & Budaya</option>
-                                    <option value="Produk">Produk Lokal</option>
+                            <label className="block text-sm font-bold text-gray-700 mb-1">Kategori</label>
+                            <div className="relative">
+                                <Tag className="absolute left-3 top-2.5 text-gray-400" size={18} />
+                                <select {...register('kategori')} className={`${inputClass} pl-10 appearance-none`}>
+                                    <option value="">-- Pilih Kategori --</option>
+                                    <option value="Wisata Alam">Wisata Alam</option>
+                                    <option value="Wisata Buatan">Wisata Buatan</option>
+                                    <option value="Budaya & Sejarah">Budaya & Sejarah</option>
+                                    <option value="Kuliner">Kuliner</option>
+                                    <option value="Pertanian">Pertanian & Perkebunan</option>
                                 </select>
                             </div>
+                            {errors.kategori && <p className={errorClass}>{errors.kategori.message}</p>}
                         </div>
 
-                        {/* DRAG & DROP DIPINDAH KE SINI (KIRI) */}
+                        {/* Lokasi */}
                         <div>
-                            <label className={labelClass}>Foto Potensi</label>
-                            {!file ? (
-                                <div
-                                    onDragOver={handleDragOver}
-                                    onDragLeave={handleDragLeave}
-                                    onDrop={handleDrop}
-                                    onClick={() => fileInputRef.current?.click()}
-                                    className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-all ${isDragging ? 'border-blue-500 bg-blue-50' : 'border-gray-400 hover:bg-gray-50'
-                                        }`}
-                                >
-                                    <input type="file" accept="image/*" ref={fileInputRef} onChange={e => setFile(e.target.files?.[0] || null)} className="hidden" />
-                                    <UploadCloud className="mx-auto text-gray-500 mb-2" size={32} />
-                                    <p className="text-sm text-gray-700 font-medium">Klik atau Drag foto kesini</p>
-                                    <p className="text-xs text-red-500 mt-1 font-bold">*Maksimal 5MB</p>
-                                </div>
-                            ) : (
-                                <div className="flex items-center gap-3 p-3 bg-blue-50 border border-blue-200 rounded-lg shadow-sm">
-                                    <ImageIcon className="text-blue-600" />
-                                    <span className="text-sm font-medium text-black truncate flex-1">{file.name}</span>
-                                    <button type="button" onClick={removeFile}><X size={18} className="text-red-600 hover:scale-110 transition-transform" /></button>
-                                </div>
-                            )}
+                            <label className="block text-sm font-bold text-gray-700 mb-1">Lokasi / Dusun</label>
+                            <div className="relative">
+                                <MapPin className="absolute left-3 top-2.5 text-gray-400" size={18} />
+                                <input {...register('lokasi')} className={`${inputClass} pl-10`} placeholder="Dusun 1..." />
+                            </div>
                         </div>
                     </div>
 
-                    {/* KOLOM KANAN: Deskripsi & Tombol */}
-                    <div className="flex flex-col h-full">
-                        <label className={labelClass}>Deskripsi Lengkap Potensi</label>
-                        <div className="flex-1">
-                            <TextEditor
-                                value={deskripsi}
-                                onChange={setDeskripsi}
+                    <div className="space-y-4">
+                        {/* Deskripsi */}
+                        <div>
+                            <label className="block text-sm font-bold text-gray-700 mb-1">Deskripsi Lengkap</label>
+                            <textarea 
+                                {...register('deskripsi')} 
+                                className={inputClass} 
+                                rows={4} 
+                                placeholder="Jelaskan keunggulan potensi ini secara rinci..." 
                             />
+                            {errors.deskripsi && <p className={errorClass}>{errors.deskripsi.message}</p>}
                         </div>
 
-                        <button
-                            disabled={uploading}
-                            type="submit"
-                            className={`w-full bg-blue-600 text-white px-4 py-3 rounded-lg hover:bg-blue-700 flex items-center justify-center gap-2 font-medium mt-4 shadow-md transition-transform active:scale-95 ${uploading ? 'opacity-50 cursor-not-allowed' : ''}`}
-                        >
-                            {uploading ? <Loader2 className="animate-spin" /> : <Plus size={20} />}
-                            {uploading ? 'Menyimpan...' : 'Simpan Potensi'}
-                        </button>
+                        {/* Foto */}
+                        <div>
+                            <label className="block text-sm font-bold text-gray-700 mb-1">Foto Utama</label>
+                            {!previewUrl ? (
+                                <div
+                                    onClick={() => fileInputRef.current?.click()}
+                                    className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center cursor-pointer hover:bg-gray-50 transition-colors"
+                                >
+                                    <UploadCloud className="mx-auto text-gray-400 mb-2" />
+                                    <p className="text-sm text-gray-500">Klik untuk upload foto</p>
+                                </div>
+                            ) : (
+                                <div className="relative rounded-lg overflow-hidden border border-gray-200 h-40 w-full group">
+                                    <Image src={previewUrl} alt="Preview Foto" fill className="object-cover" />
+                                    <button
+                                        type="button"
+                                        onClick={clearFile}
+                                        className="absolute top-2 right-2 bg-red-600 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                                    >
+                                        <X size={16} />
+                                    </button>
+                                </div>
+                            )}
+                            <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept="image/*" />
+                        </div>
+
+                        {/* Action Buttons */}
+                        <div className="flex gap-3 pt-2">
+                            <button
+                                type="submit"
+                                disabled={isSubmitting}
+                                className={`flex-1 py-2.5 rounded-lg font-bold text-white shadow-sm flex items-center justify-center gap-2 transition-all active:scale-95 ${editingId ? 'bg-orange-600 hover:bg-orange-700' : 'bg-green-600 hover:bg-green-700'}`}
+                            >
+                                {isSubmitting ? (
+                                    <div className="flex items-center gap-2">
+                                        <Loader2 className="animate-spin" size={18} />
+                                        <span>{compressionProgress ? 'Mengompres...' : 'Menyimpan...'}</span>
+                                    </div>
+                                ) : (
+                                    <>
+                                        <Save size={18} />
+                                        {editingId ? 'Simpan Perubahan' : 'Simpan Data'}
+                                    </>
+                                )}
+                            </button>
+                            {editingId && (
+                                <button
+                                    type="button"
+                                    onClick={handleCancel}
+                                    className="px-4 py-2.5 bg-gray-100 text-gray-600 rounded-lg font-bold hover:bg-gray-200"
+                                >
+                                    Batal
+                                </button>
+                            )}
+                        </div>
                     </div>
                 </form>
             </div>
 
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {data.map((item) => (
-                    <div key={item.id} className={`bg-white rounded-xl shadow-sm overflow-hidden border-2 ${item.status === 'aktif' ? 'border-transparent' : 'border-gray-200 opacity-75'}`}>
-                        <div className="relative h-48 bg-gray-100">
-                            {item.foto_url ? (
-                                <Image src={item.foto_url} alt={item.nama} fill className="object-cover" />
-                            ) : <div className="h-full flex items-center justify-center"><ImageIcon className="text-gray-400" /></div>}
+            {/* --- LIST DATA --- */}
+            {loading ? (
+                <div className="flex justify-center py-10"><Loader2 className="animate-spin text-green-600" size={32} /></div>
+            ) : (
+                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {data.map((item) => (
+                        <div key={item.id} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden flex flex-col hover:shadow-md transition-shadow group">
+                            <div className="h-48 bg-gray-100 relative overflow-hidden">
+                                {item.foto_url ? (
+                                    <Image 
+                                        src={item.foto_url} 
+                                        // Gunakan 'item.nama' untuk alt text
+                                        alt={item.nama || 'Foto Potensi Desa'} 
+                                        fill 
+                                        className="object-cover transition-transform duration-500 group-hover:scale-110" 
+                                        sizes="(max-width: 768px) 100vw, 33vw" 
+                                    />
+                                ) : (
+                                    <div className="w-full h-full flex items-center justify-center text-gray-400">
+                                        <Mountain size={48} opacity={0.3} />
+                                    </div>
+                                )}
+                                <div className="absolute top-2 right-2">
+                                    <span className="bg-black/50 backdrop-blur-sm text-white text-[10px] font-bold px-2 py-1 rounded-full">
+                                        {item.kategori}
+                                    </span>
+                                </div>
+                            </div>
+                            <div className="p-5 flex-1 flex flex-col">
+                                {/* Tampilkan Nama (bukan Judul) */}
+                                <h3 className="font-bold text-lg text-gray-800 line-clamp-1 mb-1">{item.nama}</h3>
+                                <div className="flex items-center gap-1 text-gray-500 text-xs mb-3">
+                                    <MapPin size={12} />
+                                    <span>{item.lokasi || 'Lokasi belum diset'}</span>
+                                </div>
+                                <p className="text-gray-500 text-sm line-clamp-2 mb-4 flex-1">{item.deskripsi}</p>
 
-                            <div className="absolute top-2 right-2 flex gap-2">
-                                <span className={`px-2 py-1 rounded text-xs font-bold text-white shadow-sm ${item.status === 'aktif' ? 'bg-green-500' : 'bg-gray-500'}`}>
-                                    {item.status === 'aktif' ? 'Aktif' : 'Non-Aktif'}
-                                </span>
+                                <div className="flex gap-2 mt-auto pt-4 border-t border-gray-100">
+                                    <button
+                                        onClick={() => handleEdit(item)}
+                                        className="flex-1 bg-blue-50 text-blue-700 py-2 rounded-lg text-sm font-bold hover:bg-blue-100 transition-colors flex items-center justify-center gap-2"
+                                    >
+                                        <Edit2 size={16} /> Edit
+                                    </button>
+                                    <button
+                                        onClick={() => confirmDelete(item.id, item.foto_url)}
+                                        className="px-3 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors"
+                                    >
+                                        <Trash2 size={18} />
+                                    </button>
+                                </div>
                             </div>
                         </div>
+                    ))}
 
-                        <div className="p-4">
-                            <div className="flex justify-between items-start mb-2">
-                                <h3 className="font-bold text-gray-800 line-clamp-1">{item.nama}</h3>
-                                <span className="text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full">{item.kategori}</span>
-                            </div>
-                            <div className="flex items-center text-xs text-gray-500 mb-2">
-                                <MapPin size={12} className="mr-1" /> {item.lokasi}
-                            </div>
-                            <p className="text-gray-500 text-sm line-clamp-2 mb-4 h-10 whitespace-pre-line">{stripHtml(item.deskripsi,8)}</p>
-
-                            <div className="pt-3 border-t flex justify-between items-center">
-                                <button
-                                    onClick={() => toggleStatus(item.id, item.status)}
-                                    className={`text-xs font-semibold px-3 py-1.5 rounded-md transition-colors ${item.status === 'aktif' ? 'bg-red-50 text-red-600 hover:bg-red-100' : 'bg-green-50 text-green-600 hover:bg-green-100'}`}
-                                >
-                                    {item.status === 'aktif' ? 'Non-aktifkan' : 'Aktifkan'}
-                                </button>
-                                <button
-                                    onClick={() => openDeleteModal(item.id)}
-                                    className="text-gray-400 hover:text-red-500 p-1 transition-colors"
-                                    title="Hapus"
-                                >
-                                    <Trash2 size={18} />
-                                </button>
-                            </div>
+                    {data.length === 0 && (
+                        <div className="col-span-full py-12 text-center text-gray-400 border border-dashed border-gray-300 rounded-xl">
+                            <Mountain size={48} className="mx-auto mb-2 opacity-20" />
+                            <p>Belum ada data potensi desa.</p>
                         </div>
-                    </div>
-                ))}
-            </div>
+                    )}
+                </div>
+            )}
+
+            <DeleteModal
+                isOpen={deleteState.show}
+                onClose={() => setDeleteState(prev => ({ ...prev, show: false }))}
+                onConfirm={handleDelete}
+                loading={deleteState.loading}
+            />
         </div>
     )
 }

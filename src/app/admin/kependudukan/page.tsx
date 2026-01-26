@@ -1,24 +1,61 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
-import { Loader2, Plus, Save, Trash2, Users, Edit2, X } from 'lucide-react'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import * as z from 'zod'
+import { Loader2, Plus, Save, Trash2, Edit2, Store, UploadCloud, X, ImageIcon } from 'lucide-react'
+import Image from 'next/image'
+import { toast } from 'react-hot-toast'
+import DeleteModal from '@/components/DeleteModal'
 
-interface Statistik {
+// --- 1. SKEMA VALIDASI (ZOD) ---
+// Ini menentukan aturan main data kita. Jika melanggar, form tidak akan submit.
+const umkmSchema = z.object({
+  nama_umkm: z.string().min(3, "Nama UMKM minimal 3 karakter"),
+  pemilik: z.string().min(3, "Nama pemilik minimal 3 karakter"),
+  deskripsi: z.string().min(10, "Deskripsi terlalu pendek (min 10 karakter)"),
+  kontak: z.string().min(10, "Nomor HP tidak valid (min 10 angka)").regex(/^[0-9]+$/, "Hanya boleh angka"),
+  alamat: z.string().optional(),
+})
+
+// Tipe data diturunkan langsung dari Zod (Otomatis)
+type UmkmFormValues = z.infer<typeof umkmSchema>
+
+// Tipe data dari Database
+interface UMKM extends UmkmFormValues {
   id: number
-  label: string
-  jumlah: number
-  satuan: string
+  foto_url: string | null
+  created_at?: string
 }
 
-export default function AdminKependudukanPage() {
-  const [data, setData] = useState<Statistik[]>([])
+export default function AdminUmkmPage() {
+  const [data, setData] = useState<UMKM[]>([])
   const [loading, setLoading] = useState(true)
-  
-  // State untuk Edit/Tambah
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
+  // State untuk Edit & Upload
   const [editingId, setEditingId] = useState<number | null>(null)
-  const [form, setForm] = useState({ label: '', jumlah: '', satuan: 'Jiwa' })
-  const [isSaving, setIsSaving] = useState(false)
+  const [file, setFile] = useState<File | null>(null)
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // State Modal Hapus
+  const [deleteState, setDeleteState] = useState<{ show: boolean; id: number | null; foto_url: string | null; loading: boolean }>({
+    show: false, id: null, foto_url: null, loading: false
+  })
+
+  // --- 2. SETUP REACT HOOK FORM ---
+  const {
+    register,
+    handleSubmit,
+    reset,
+    setValue,
+    formState: { errors }
+  } = useForm<UmkmFormValues>({
+    resolver: zodResolver(umkmSchema), // Sambungkan Zod ke Form
+  })
 
   useEffect(() => {
     fetchData()
@@ -26,138 +63,297 @@ export default function AdminKependudukanPage() {
 
   const fetchData = async () => {
     try {
-      const { data, error } = await supabase.from('statistik').select('*').order('id', { ascending: true })
+      const { data, error } = await supabase.from('umkm').select('*').order('id', { ascending: false })
       if (error) throw error
-      setData(data as Statistik[])
+      setData(data as UMKM[])
     } catch (error) {
-      console.error('Error:', error)
+      toast.error('Gagal memuat data UMKM')
     } finally {
       setLoading(false)
     }
   }
 
-  const handleEdit = (item: Statistik) => {
+  // --- HANDLER FILE ---
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = e.target.files?.[0]
+    if (selectedFile) {
+      if (selectedFile.size > 2 * 1024 * 1024) {
+        toast.error('Ukuran file maksimal 2MB')
+        return
+      }
+      setFile(selectedFile)
+      setPreviewUrl(URL.createObjectURL(selectedFile)) // Preview lokal
+    }
+  }
+
+  const clearFile = () => {
+    setFile(null)
+    setPreviewUrl(null)
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
+  // --- 3. FITUR EDIT (POPULATE FORM) ---
+  const handleEdit = (item: UMKM) => {
     setEditingId(item.id)
-    setForm({ label: item.label, jumlah: item.jumlah.toString(), satuan: item.satuan })
+    // Isi form otomatis menggunakan setValue dari React Hook Form
+    setValue('nama_umkm', item.nama_umkm)
+    setValue('pemilik', item.pemilik)
+    setValue('deskripsi', item.deskripsi)
+    setValue('kontak', item.kontak)
+    setValue('alamat', item.alamat || '')
+
+    // Set preview foto lama jika ada
+    if (item.foto_url) {
+      setPreviewUrl(item.foto_url)
+    } else {
+      setPreviewUrl(null)
+    }
+
+    // Scroll ke form
+    window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   const handleCancel = () => {
     setEditingId(null)
-    setForm({ label: '', jumlah: '', satuan: 'Jiwa' })
+    reset() // Kosongkan form otomatis
+    clearFile()
   }
 
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setIsSaving(true)
+  // --- 4. SUBMIT HANDLER (CREATE & UPDATE) ---
+  const onSubmit = async (values: UmkmFormValues) => {
+    setIsSubmitting(true)
 
     try {
-      if (editingId) {
-        // Update Data
-        await supabase.from('statistik').update({
-          label: form.label,
-          jumlah: parseInt(form.jumlah),
-          satuan: form.satuan
-        }).eq('id', editingId)
-      } else {
-        // Insert Data Baru
-        await supabase.from('statistik').insert([{
-          label: form.label,
-          jumlah: parseInt(form.jumlah),
-          satuan: form.satuan
-        }])
+      let finalFotoUrl = previewUrl
+
+      // 1. Jika ada file baru diupload
+      if (file) {
+        const fileExt = file.name.split('.').pop()
+        const fileName = `${Date.now()}.${fileExt}`
+        const filePath = `${fileName}`
+
+        const { error: uploadError } = await supabase.storage.from('umkm').upload(filePath, file)
+        if (uploadError) throw uploadError
+
+        const { data: { publicUrl } } = supabase.storage.from('umkm').getPublicUrl(filePath)
+        finalFotoUrl = publicUrl
       }
-      
+
+      // 2. Logika Simpan ke DB
+      if (editingId) {
+        // --- MODE UPDATE ---
+        const { error } = await supabase
+          .from('umkm')
+          .update({
+            ...values, // Spread semua data form
+            foto_url: finalFotoUrl
+          })
+          .eq('id', editingId)
+
+        if (error) throw error
+        toast.success('UMKM berhasil diperbarui!')
+
+      } else {
+        // --- MODE INSERT ---
+        const { error } = await supabase
+          .from('umkm')
+          .insert([{
+            ...values,
+            foto_url: finalFotoUrl
+          }])
+
+        if (error) throw error
+        toast.success('UMKM baru ditambahkan!')
+      }
+
       handleCancel()
       fetchData()
+
     } catch (error) {
-      alert('Gagal menyimpan data')
+      console.error(error)
+      toast.error('Gagal menyimpan data')
     } finally {
-      setIsSaving(false)
+      setIsSubmitting(false)
     }
   }
 
-  const handleDelete = async (id: number) => {
-    if(!confirm("Hapus data ini?")) return;
-    await supabase.from('statistik').delete().eq('id', id)
-    fetchData()
+  // --- DELETE LOGIC ---
+  const confirmDelete = (id: number, foto_url: string | null) => {
+    setDeleteState({ show: true, id, foto_url, loading: false })
   }
+
+  const handleDelete = async () => {
+    if (!deleteState.id) return
+    setDeleteState(prev => ({ ...prev, loading: true }))
+
+    try {
+      if (deleteState.foto_url) {
+        const fileName = deleteState.foto_url.split('/').pop()
+        if (fileName) await supabase.storage.from('umkm').remove([fileName])
+      }
+      await supabase.from('umkm').delete().eq('id', deleteState.id)
+
+      toast.success('Data dihapus')
+      fetchData()
+      setDeleteState({ show: false, id: null, foto_url: null, loading: false })
+    } catch (error) {
+      toast.error('Gagal menghapus')
+      setDeleteState(prev => ({ ...prev, loading: false }))
+    }
+  }
+
+  // Class styles
+  const inputClass = "w-full border border-gray-300 rounded-lg px-4 py-2 text-black bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+  const errorClass = "text-red-500 text-xs mt-1 font-medium"
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-gray-800 mb-6">Data Kependudukan</h1>
+      <h1 className="text-2xl font-bold text-gray-800 mb-6">Kelola Data UMKM</h1>
 
-      {/* Form Input / Edit */}
-      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 mb-8">
-        <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
-            {editingId ? <Edit2 size={20} className="text-orange-600" /> : <Plus size={20} className="text-blue-600" />}
-            {editingId ? 'Edit Data' : 'Tambah Kategori Baru'}
+      {/* --- FORM CARD --- */}
+      <div className={`bg-white p-6 rounded-xl shadow-sm border mb-8 transition-all ${editingId ? 'border-orange-200 ring-2 ring-orange-100' : 'border-gray-200'}`}>
+        <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2 border-b pb-2">
+          {editingId ? <Edit2 size={20} className="text-orange-600" /> : <Plus size={20} className="text-blue-600" />}
+          {editingId ? 'Edit UMKM' : 'Tambah UMKM Baru'}
         </h2>
-        
-        <form onSubmit={handleSave} className="grid md:grid-cols-4 gap-4 items-end">
-            <div className="md:col-span-2">
-                <label className="block text-sm font-bold text-gray-700 mb-1">Label Kategori</label>
-                <input 
-                    type="text" 
-                    value={form.label}
-                    onChange={e => setForm({...form, label: e.target.value})}
-                    placeholder="Contoh: Total Pemuda"
-                    className="w-full border border-gray-300 rounded-lg px-4 py-2 text-black bg-white focus:ring-2 focus:ring-blue-500"
-                    required
-                />
-            </div>
+
+        <form onSubmit={handleSubmit(onSubmit)} className="grid md:grid-cols-2 gap-6">
+          <div className="space-y-4">
+            {/* Input dengan Register Zod */}
             <div>
-                <label className="block text-sm font-bold text-gray-700 mb-1">Jumlah</label>
-                <input 
-                    type="number" 
-                    value={form.jumlah}
-                    onChange={e => setForm({...form, jumlah: e.target.value})}
-                    placeholder="0"
-                    className="w-full border border-gray-300 rounded-lg px-4 py-2 text-black bg-white focus:ring-2 focus:ring-blue-500"
-                    required
-                />
+              <label className="block text-sm font-bold text-gray-700 mb-1">Nama UMKM</label>
+              <input {...register('nama_umkm')} className={inputClass} placeholder="Contoh: Keripik Pisang Mak Ijah" />
+              {errors.nama_umkm && <p className={errorClass}>{errors.nama_umkm.message}</p>}
             </div>
-            <div className="flex gap-2">
-                <button 
-                    type="submit" 
-                    disabled={isSaving}
-                    className={`flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-bold text-white transition-all ${editingId ? 'bg-orange-600 hover:bg-orange-700' : 'bg-blue-600 hover:bg-blue-700'}`}
+
+            <div>
+              <label className="block text-sm font-bold text-gray-700 mb-1">Nama Pemilik</label>
+              <input {...register('pemilik')} className={inputClass} placeholder="Nama lengkap pemilik" />
+              {errors.pemilik && <p className={errorClass}>{errors.pemilik.message}</p>}
+            </div>
+
+            <div>
+              <label className="block text-sm font-bold text-gray-700 mb-1">No. WhatsApp</label>
+              <input {...register('kontak')} className={inputClass} placeholder="0812..." type="tel" />
+              {errors.kontak && <p className={errorClass}>{errors.kontak.message}</p>}
+            </div>
+
+            <div>
+              <label className="block text-sm font-bold text-gray-700 mb-1">Alamat (Opsional)</label>
+              <textarea {...register('alamat')} className={inputClass} rows={2} placeholder="Alamat produksi..." />
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-bold text-gray-700 mb-1">Deskripsi Produk</label>
+              <textarea {...register('deskripsi')} className={inputClass} rows={4} placeholder="Jelaskan produk unggulan..." />
+              {errors.deskripsi && <p className={errorClass}>{errors.deskripsi.message}</p>}
+            </div>
+
+            <div>
+              <label className="block text-sm font-bold text-gray-700 mb-1">Foto Produk</label>
+              {!previewUrl ? (
+                <div
+                  onClick={() => fileInputRef.current?.click()}
+                  className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center cursor-pointer hover:bg-gray-50 transition-colors"
                 >
-                    {isSaving ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />}
-                    {editingId ? 'Update' : 'Simpan'}
-                </button>
-                {editingId && (
-                    <button type="button" onClick={handleCancel} className="bg-gray-200 text-gray-600 p-2 rounded-lg hover:bg-gray-300">
-                        <X size={20} />
-                    </button>
-                )}
+                  <UploadCloud className="mx-auto text-gray-400 mb-2" />
+                  <p className="text-sm text-gray-500">Klik untuk upload foto</p>
+                </div>
+              ) : (
+                <div className="relative rounded-lg overflow-hidden border border-gray-200 h-40 w-full group">
+                  {/* Tampilkan Preview (bisa dari URL lama atau Blob baru) */}
+                  <Image src={previewUrl} alt="Preview" fill className="object-cover" sizes="(max-width: 768px) 100vw, 50vw" />
+                  <button
+                    type="button"
+                    onClick={clearFile}
+                    className="absolute top-2 right-2 bg-red-600 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+              )}
+              <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept="image/*" />
             </div>
+
+            <div className="flex gap-3 pt-2">
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className={`flex-1 py-2.5 rounded-lg font-bold text-white shadow-sm flex items-center justify-center gap-2 transition-all active:scale-95 ${editingId ? 'bg-orange-600 hover:bg-orange-700' : 'bg-blue-600 hover:bg-blue-700'}`}
+              >
+                {isSubmitting ? <Loader2 className="animate-spin" /> : <Save size={18} />}
+                {editingId ? 'Simpan Perubahan' : 'Simpan Data'}
+              </button>
+              {editingId && (
+                <button
+                  type="button"
+                  onClick={handleCancel}
+                  className="px-4 py-2.5 bg-gray-100 text-gray-600 rounded-lg font-bold hover:bg-gray-200"
+                >
+                  Batal
+                </button>
+              )}
+            </div>
+          </div>
         </form>
       </div>
 
-      {/* List Statistik */}
-      <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {data.map((item) => (
-            <div key={item.id} className="bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex flex-col justify-between group hover:border-blue-300 transition-all">
-                <div>
-                    <div className="flex items-center gap-2 text-gray-500 mb-2">
-                        <Users size={18} />
-                        <span className="text-xs font-bold uppercase tracking-wider">{item.satuan}</span>
-                    </div>
-                    <h3 className="text-3xl font-bold text-gray-900 mb-1">{item.jumlah.toLocaleString('id-ID')}</h3>
-                    <p className="text-gray-600 font-medium">{item.label}</p>
+      {/* --- LIST DATA --- */}
+      {loading ? (
+        <div className="flex justify-center py-10"><Loader2 className="animate-spin text-green-600" size={32} /></div>
+      ) : (
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {data.map((item) => (
+            <div key={item.id} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden flex flex-col hover:shadow-md transition-shadow">
+              <div className="h-48 bg-gray-100 relative">
+                {item.foto_url ? (
+                  <Image src={item.foto_url} alt={item.nama_umkm} fill className="object-cover" sizes="(max-width: 768px) 100vw, 33vw" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-gray-400">
+                    <Store size={48} opacity={0.3} />
+                  </div>
+                )}
+              </div>
+              <div className="p-5 flex-1 flex flex-col">
+                <h3 className="font-bold text-lg text-gray-800 line-clamp-1">{item.nama_umkm}</h3>
+                <p className="text-sm text-blue-600 font-medium mb-2">{item.pemilik}</p>
+                <p className="text-gray-500 text-sm line-clamp-2 mb-4 flex-1">{item.deskripsi}</p>
+
+                <div className="flex gap-2 mt-auto pt-4 border-t border-gray-100">
+                  <button
+                    onClick={() => handleEdit(item)}
+                    className="flex-1 bg-blue-50 text-blue-700 py-2 rounded-lg text-sm font-bold hover:bg-blue-100 transition-colors flex items-center justify-center gap-2"
+                  >
+                    <Edit2 size={16} /> Edit
+                  </button>
+                  <button
+                    onClick={() => confirmDelete(item.id, item.foto_url)}
+                    className="px-3 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors"
+                  >
+                    <Trash2 size={18} />
+                  </button>
                 </div>
-                
-                <div className="flex justify-end gap-2 mt-4 pt-4 border-t border-gray-100 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button onClick={() => handleEdit(item)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg">
-                        <Edit2 size={16} />
-                    </button>
-                    <button onClick={() => handleDelete(item.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg">
-                        <Trash2 size={16} />
-                    </button>
-                </div>
+              </div>
             </div>
-        ))}
-      </div>
+          ))}
+
+          {data.length === 0 && (
+            <div className="col-span-full py-12 text-center text-gray-400 border border-dashed border-gray-300 rounded-xl">
+              <Store size={48} className="mx-auto mb-2 opacity-20" />
+              <p>Belum ada data UMKM.</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      <DeleteModal
+        isOpen={deleteState.show}
+        onClose={() => setDeleteState(prev => ({ ...prev, show: false }))}
+        onConfirm={handleDelete}
+        loading={deleteState.loading}
+      />
     </div>
   )
 }

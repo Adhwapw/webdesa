@@ -1,22 +1,40 @@
 'use client'
 
-import { useState, useEffect, FormEvent } from 'react'
+import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
-import { Save, Loader2, Building, Phone, BookOpen, History } from 'lucide-react'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import * as z from 'zod'
+import { Save, Loader2, Building, BookOpen, History, Phone, Mail, MapPin } from 'lucide-react'
+import { toast } from 'react-hot-toast'
 import SecuritySettings from '@/components/SecuritySettings'
+
+// --- 1. SKEMA VALIDASI (ZOD) ---
+const profilSchema = z.object({
+  nama_desa: z.string().min(3, "Nama desa minimal 3 karakter"),
+  email: z.string().email("Format email tidak valid").optional().or(z.literal('')), // Boleh kosong, tapi kalau isi harus email valid
+  telepon: z.string().regex(/^[0-9]*$/, "Hanya boleh angka").min(10, "Nomor telepon minimal 10 digit").optional().or(z.literal('')),
+  alamat_lengkap: z.string().min(10, "Alamat terlalu pendek"),
+  sejarah: z.string().optional(),
+  visi: z.string().optional(),
+  misi: z.string().optional(),
+})
+
+type ProfilFormValues = z.infer<typeof profilSchema>
 
 export default function AdminPengaturanPage() {
   const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
-  
-  // State Form
-  const [namaDesa, setNamaDesa] = useState('')
-  const [alamat, setAlamat] = useState('')
-  const [telepon, setTelepon] = useState('')
-  const [email, setEmail] = useState('')
-  const [sejarah, setSejarah] = useState('')
-  const [visi, setVisi] = useState('')
-  const [misi, setMisi] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
+  // --- 2. SETUP REACT HOOK FORM ---
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors }
+  } = useForm<ProfilFormValues>({
+    resolver: zodResolver(profilSchema),
+  })
 
   useEffect(() => {
     fetchProfil()
@@ -24,133 +42,186 @@ export default function AdminPengaturanPage() {
 
   const fetchProfil = async () => {
     try {
-      const { data, error } = await supabase.from('profil_desa').select('*').single()
+      // Ambil data profil (asumsi ID=1 atau single row)
+      const { data, error } = await supabase
+        .from('profil_desa')
+        .select('*')
+        .limit(1)
+        .maybeSingle()
+      
+      if (error) throw error
+      
       if (data) {
-        setNamaDesa(data.nama_desa || '')
-        setAlamat(data.alamat_lengkap || '')
-        setTelepon(data.telepon || '')
-        setEmail(data.email || '')
-        setSejarah(data.sejarah || '')
-        setVisi(data.visi || '')
-        setMisi(data.misi || '')
+        // Isi form dengan data dari database
+        reset({
+            nama_desa: data.nama_desa || '',
+            email: data.email || '',
+            telepon: data.telepon || '',
+            alamat_lengkap: data.alamat_lengkap || '',
+            sejarah: data.sejarah || '',
+            visi: data.visi || '',
+            misi: data.misi || ''
+        })
       }
     } catch (error) {
       console.error('Error fetching profil:', error)
+      toast.error('Gagal memuat data profil')
     } finally {
       setLoading(false)
     }
   }
 
-  const handleSave = async (e: FormEvent) => {
-    e.preventDefault()
-    setSaving(true)
+  // --- 3. SUBMIT HANDLER ---
+  const onSubmit = async (values: ProfilFormValues) => {
+    setIsSubmitting(true)
+    
     try {
-      const { error } = await supabase
-        .from('profil_desa')
-        .update({
-            nama_desa: namaDesa,
-            alamat_lengkap: alamat,
-            telepon: telepon,
-            email: email,
-            sejarah: sejarah,
-            visi: visi,
-            misi: misi
-        })
-        .eq('id', 1)
+      // Cek apakah data sudah ada (untuk menentukan insert/update)
+      const { data: existingData } = await supabase.from('profil_desa').select('id').limit(1).maybeSingle()
+
+      let error
+      
+      if (existingData) {
+        // UPDATE
+        const result = await supabase
+          .from('profil_desa')
+          .update({
+            ...values,
+          })
+          .eq('id', existingData.id)
+          error = result.error
+      } else {
+        // INSERT PERTAMA KALI
+        const result = await supabase
+          .from('profil_desa')
+          .insert([values])
+          error = result.error
+      }
 
       if (error) throw error
-      alert('Pengaturan berhasil disimpan!')
+      
+      toast.success('Pengaturan profil berhasil disimpan!')
     } catch (error) {
       console.error('Error saving:', error)
-      alert('Gagal menyimpan data.')
+      toast.error('Gagal menyimpan perubahan.')
     } finally {
-      setSaving(false)
+      setIsSubmitting(false)
     }
   }
 
-  // Class untuk Input agar kontras tinggi (HITAM DI ATAS PUTIH)
-  const inputClass = "w-full border border-gray-400 rounded-lg px-4 py-3 bg-white text-black placeholder:text-gray-600 focus:outline-none focus:ring-2 focus:ring-green-500 font-medium"
-  const labelClass = "block text-sm font-bold text-black mb-2"
+  // Styles
+  const inputClass = "w-full border border-gray-300 rounded-lg px-4 py-2.5 bg-white text-black placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500 font-medium transition-all"
+  const labelClass = "block text-sm font-bold text-gray-700 mb-1"
+  const errorClass = "text-red-500 text-xs mt-1 font-medium"
+  const iconClass = "absolute left-3 top-3 text-gray-400"
+  const inputWithIconClass = "w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg bg-white text-black placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500 font-medium transition-all"
 
-  if (loading) return <div className="p-8 text-center text-black">Memuat data...</div>
+  if (loading) {
+      return (
+          <div className="flex justify-center items-center h-64">
+              <Loader2 className="animate-spin text-green-600" size={32} />
+          </div>
+      )
+  }
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-black mb-6">Pengaturan Profil Desa</h1>
+      <h1 className="text-2xl font-bold text-gray-800 mb-6">Pengaturan Profil Desa</h1>
       
-      {/* FORM 1: Profil Desa */}
-      {/* Kita tutup form ini SEBELUM bagian SecuritySettings */}
-      <form onSubmit={handleSave} className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 space-y-8">
+      {/* FORM UTAMA */}
+      <form onSubmit={handleSubmit(onSubmit)} className="bg-white p-8 rounded-xl shadow-sm border border-gray-200 space-y-8 animate-fade-in-up">
         
-        {/* Identitas Dasar */}
+        {/* BAGIAN 1: Identitas & Kontak */}
         <div>
-            <h3 className="text-lg font-bold text-black mb-4 flex items-center gap-2 border-b pb-2">
+            <h3 className="text-lg font-bold text-gray-800 mb-5 flex items-center gap-2 border-b pb-2">
                 <Building size={20} className="text-green-700" /> Identitas & Kontak
             </h3>
             <div className="grid md:grid-cols-2 gap-6">
-                <div>
-                    <label className={labelClass}>Nama Desa</label>
-                    <input type="text" value={namaDesa} onChange={e => setNamaDesa(e.target.value)} className={inputClass} required />
+                {/* Nama Desa */}
+                <div className="md:col-span-2">
+                    <label className={labelClass}>Nama Desa / Instansi</label>
+                    <input {...register('nama_desa')} className={inputClass} placeholder="Contoh: Pemerintah Desa Citamiang" />
+                    {errors.nama_desa && <p className={errorClass}>{errors.nama_desa.message}</p>}
                 </div>
+
+                {/* Email */}
                 <div>
-                    <label className={labelClass}>Email</label>
-                    <input type="email" value={email} onChange={e => setEmail(e.target.value)} className={inputClass} />
+                    <label className={labelClass}>Email Resmi</label>
+                    <div className="relative">
+                        <Mail className={iconClass} size={18} />
+                        <input {...register('email')} className={inputWithIconClass} placeholder="admin@desacitamiang.id" />
+                    </div>
+                    {errors.email && <p className={errorClass}>{errors.email.message}</p>}
                 </div>
+
+                {/* Telepon */}
                 <div>
-                    <label className={labelClass}>No. Telepon / WA</label>
-                    <input type="text" value={telepon} onChange={e => setTelepon(e.target.value)} className={inputClass} />
+                    <label className={labelClass}>No. Telepon / WhatsApp</label>
+                    <div className="relative">
+                        <Phone className={iconClass} size={18} />
+                        <input {...register('telepon')} className={inputWithIconClass} placeholder="081234567890" type="tel" />
+                    </div>
+                    {errors.telepon && <p className={errorClass}>{errors.telepon.message}</p>}
                 </div>
+
+                {/* Alamat */}
                 <div className="md:col-span-2">
                     <label className={labelClass}>Alamat Lengkap</label>
-                    <textarea value={alamat} onChange={e => setAlamat(e.target.value)} className={inputClass} rows={3} />
+                    <div className="relative">
+                         <MapPin className={iconClass} size={18} />
+                         <textarea {...register('alamat_lengkap')} className={`${inputWithIconClass} min-h-[80px] py-3`} placeholder="Jl. Raya Citamiang No..." />
+                    </div>
+                    {errors.alamat_lengkap && <p className={errorClass}>{errors.alamat_lengkap.message}</p>}
                 </div>
             </div>
         </div>
 
-        {/* Sejarah */}
+        {/* BAGIAN 2: Sejarah */}
         <div>
-            <h3 className="text-lg font-bold text-black mb-4 flex items-center gap-2 border-b pb-2">
+            <h3 className="text-lg font-bold text-gray-800 mb-5 flex items-center gap-2 border-b pb-2">
                 <History size={20} className="text-blue-700" /> Sejarah Desa
             </h3>
             <div>
-                <label className={labelClass}>Cerita Sejarah</label>
-                <textarea value={sejarah} onChange={e => setSejarah(e.target.value)} className={inputClass} rows={6} />
+                <label className={labelClass}>Cerita Sejarah Singkat</label>
+                <textarea {...register('sejarah')} className={inputClass} rows={6} placeholder="Ceritakan sejarah berdirinya desa..." />
             </div>
         </div>
 
-        {/* Visi Misi */}
+        {/* BAGIAN 3: Visi & Misi */}
         <div>
-            <h3 className="text-lg font-bold text-black mb-4 flex items-center gap-2 border-b pb-2">
+            <h3 className="text-lg font-bold text-gray-800 mb-5 flex items-center gap-2 border-b pb-2">
                 <BookOpen size={20} className="text-purple-700" /> Visi & Misi
             </h3>
             <div className="space-y-6">
                 <div>
                     <label className={labelClass}>Visi</label>
-                    <textarea value={visi} onChange={e => setVisi(e.target.value)} className={inputClass} rows={3} placeholder="Visi desa..." />
+                    <textarea {...register('visi')} className={inputClass} rows={3} placeholder="Visi desa..." />
                 </div>
                 <div>
                     <label className={labelClass}>Misi</label>
-                    <textarea value={misi} onChange={e => setMisi(e.target.value)} className={inputClass} rows={6} placeholder="Tuliskan misi per baris (Enter untuk poin baru)" />
-                    <p className="text-xs text-gray-600 font-bold mt-2">*Gunakan tombol Enter untuk memisahkan poin misi.</p>
+                    <textarea {...register('misi')} className={inputClass} rows={6} placeholder="Tuliskan misi per baris..." />
+                    <p className="text-xs text-gray-500 mt-2 font-medium bg-gray-50 p-2 rounded inline-block">💡 Tips: Gunakan tombol Enter untuk memisahkan setiap poin misi.</p>
                 </div>
             </div>
         </div>
 
-        {/* Tombol Simpan Profil */}
-        <button 
-            type="submit" 
-            disabled={saving}
-            className="bg-green-700 text-white px-8 py-3 rounded-lg font-bold hover:bg-green-800 flex items-center gap-2 shadow-md transition-all active:scale-95"
-        >
-            {saving ? <Loader2 className="animate-spin" /> : <Save size={20} />}
-            Simpan Perubahan
-        </button>
+        {/* Tombol Simpan */}
+        <div className="pt-4 border-t border-gray-100">
+            <button 
+                type="submit" 
+                disabled={isSubmitting}
+                className={`bg-green-700 text-white px-8 py-3 rounded-lg font-bold hover:bg-green-800 flex items-center gap-2 shadow-md transition-all active:scale-95 ${isSubmitting ? 'opacity-70 cursor-not-allowed' : ''}`}
+            >
+                {isSubmitting ? <Loader2 className="animate-spin" /> : <Save size={20} />}
+                {isSubmitting ? 'Menyimpan Perubahan...' : 'Simpan Profil Desa'}
+            </button>
+        </div>
 
-      </form> {/* <--- FORM DITUTUP DI SINI */}
+      </form>
 
-      {/* Bagian Keamanan (Ditaruh DI LUAR form profil desa) */}
-      <div className="mt-12">
-          <h2 className="text-xl font-bold text-black mb-4">Keamanan Akun</h2>
+      {/* Security Settings (Password) */}
+      <div className="mt-12 mb-8">
+          <h2 className="text-xl font-bold text-gray-800 mb-4 px-1">Keamanan Akun</h2>
           <SecuritySettings />
       </div>
 

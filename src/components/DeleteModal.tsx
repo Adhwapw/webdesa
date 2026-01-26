@@ -7,15 +7,25 @@ interface DeleteModalProps {
   onClose: () => void;
   onConfirm: () => void;
   loading: boolean;
+  // Tambahkan props opsional ini agar error hilang:
+  title?: string;
+  message?: string;
 }
 
-export default function DeleteModal({ isOpen, onClose, onConfirm, loading }: DeleteModalProps) {
+export default function DeleteModal({ 
+  isOpen, 
+  onClose, 
+  onConfirm, 
+  loading,
+  title = "Hapus Data?", // Default value jika tidak diisi
+  message = "Apakah Anda yakin ingin menghapus data ini? Tindakan ini tidak dapat dibatalkan." // Default value
+}: DeleteModalProps) {
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 transition-all">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 transition-all animate-in fade-in duration-200">
       {/* Container Modal */}
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden animate-in fade-in zoom-in duration-300 border border-gray-100">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200 border border-gray-100 scale-100">
         
         {/* Tombol Close di Pojok */}
         <button 
@@ -32,9 +42,10 @@ export default function DeleteModal({ isOpen, onClose, onConfirm, loading }: Del
             <AlertTriangle className="text-red-600" size={32} />
           </div>
 
-          <h3 className="text-xl font-bold text-gray-900 mb-2">Hapus Data Ini?</h3>
+          {/* Judul & Pesan Dinamis */}
+          <h3 className="text-xl font-bold text-gray-900 mb-2">{title}</h3>
           <p className="text-gray-500 text-sm mb-8 leading-relaxed">
-            Apakah Anda yakin ingin menghapus data ini? Tindakan ini <span className="font-bold text-red-500">tidak dapat dibatalkan</span>.
+            {message}
           </p>
           
           <div className="flex gap-3">

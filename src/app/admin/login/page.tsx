@@ -1,62 +1,62 @@
 'use client'
 
-import { useState, useEffect, FormEvent } from 'react'
-import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
+import { useState, useEffect, Suspense } from 'react' // Tambah Suspense
+import { useRouter, useSearchParams } from 'next/navigation' // Tambah useSearchParams
+import { createClient } from '@/lib/supabase-client'
 import { LogIn, AlertCircle, Loader2 } from 'lucide-react'
-import { AdminUser } from '@/types'
+import Link from 'next/link'
 
-export default function LoginPage() {
-    const [username, setUsername] = useState('')
+// 1. Pindahkan logika form ke komponen terpisah
+function LoginForm() {
+    const [email, setEmail] = useState('')
     const [password, setPassword] = useState('')
     const [error, setError] = useState('')
     const [loading, setLoading] = useState(false)
     const router = useRouter()
+    const searchParams = useSearchParams() // Hook untuk baca URL
+    const supabase = createClient()
 
+    // 2. Efek untuk menangkap error dari URL (misal: Link expired)
     useEffect(() => {
-        try {
-            if (localStorage.getItem('admin')) {
-                router.replace('/admin')
+        const errorDescription = searchParams.get('error_description')
+        let errorMsg = ''
+        if (errorDescription) {
+            // Terjemahkan error umum ke Bahasa Indonesia yang ramah
+            if (errorDescription.includes('Email link is invalid')) {
+                errorMsg = 'Link reset password sudah kadaluarsa atau tidak valid. Silakan minta link baru.'
+            } else {
+                errorMsg = errorDescription
             }
-        } catch (e) {
-            console.error('Error accessing localStorage:', e)
         }
-    }, [router])
+        if (errorMsg && errorMsg !== error) {
+            setError(errorMsg)
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [searchParams])
 
-    const handleLogin = async (e: FormEvent) => {
+    const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault()
         setLoading(true)
         setError('')
 
         try {
-            const { data, error } = await supabase
-                .from('admin_users')
-                .select('*')
-                .eq('username', username)
-                .eq('password', password)
-                .single()
+            const { error } = await supabase.auth.signInWithPassword({
+                email,
+                password,
+            })
 
-            if (error || !data) {
-                setError('Username atau password salah!')
+            if (error) {
+                setError('Email atau password salah!')
                 setLoading(false)
                 return
             }
 
-            const user = data as AdminUser
-            const adminData: AdminUser = {
-                id: user.id,
-                username: user.username,
-                nama_lengkap: user.nama_lengkap,
-                email: user.email,
-                role: user.role
-            }
-
-            localStorage.setItem('admin', JSON.stringify(adminData))
-            window.location.href = '/admin'
+            router.refresh()
+            router.push('/admin')
 
         } catch (err) {
             console.error('Login error:', err)
-            setError('Terjadi kesalahan sistem, silakan coba lagi.')
+            setError('Terjadi kesalahan sistem.')
             setLoading(false)
         }
     }
@@ -69,7 +69,7 @@ export default function LoginPage() {
                         <LogIn size={32} />
                     </div>
                     <h1 className="text-2xl font-bold text-green-900">Admin Login</h1>
-                    <p className="text-green-800 font-medium mt-2 text-sm">Masuk untuk mengelola Website Desa</p>
+                    <p className="text-green-800 font-medium mt-2 text-sm">Masuk via Supabase Auth</p>
                 </div>
 
                 <div className="p-8">
@@ -82,26 +82,29 @@ export default function LoginPage() {
 
                     <form onSubmit={handleLogin} className="space-y-5">
                         <div>
-                            {/* Label Hitam Tebal */}
-                            <label className="block text-sm font-bold text-black mb-2">Username</label>
+                            <label className="block text-sm font-bold text-black mb-2">Email</label>
                             <input
-                                type="text"
-                                placeholder="Masukkan username admin"
-                                // Class Input: Background Putih, Teks Hitam, Border Abu, Placeholder Abu Tua
-                                className="w-full px-4 py-3 border border-gray-400 rounded-lg focus:ring-2 focus:ring-green-500 outline-none bg-white text-black placeholder:text-gray-600 font-medium"
-                                value={username}
-                                onChange={e => setUsername(e.target.value)}
+                                type="email"
+                                placeholder="admin@desacitamiang.id"
+                                className="w-full px-4 py-3 border border-gray-400 rounded-lg focus:ring-2 focus:ring-green-500 outline-none bg-white text-black"
+                                value={email}
+                                onChange={e => setEmail(e.target.value)}
                                 required
                                 disabled={loading}
                             />
                         </div>
 
                         <div>
-                            <label className="block text-sm font-bold text-black mb-2">Password</label>
+                            <div className="flex justify-between items-center mb-2">
+                                <label className="block text-sm font-bold text-black">Password</label>
+                                <Link href="/admin/lupa-password" className="text-xs font-bold text-green-700 hover:underline">
+                                    Lupa Password?
+                                </Link>
+                            </div>
                             <input
                                 type="password"
                                 placeholder="Masukkan password"
-                                className="w-full px-4 py-3 border border-gray-400 rounded-lg focus:ring-2 focus:ring-green-500 outline-none bg-white text-black placeholder:text-gray-600 font-medium"
+                                className="w-full px-4 py-3 border border-gray-400 rounded-lg focus:ring-2 focus:ring-green-500 outline-none bg-white text-black"
                                 value={password}
                                 onChange={e => setPassword(e.target.value)}
                                 required
@@ -112,17 +115,22 @@ export default function LoginPage() {
                         <button
                             type="submit"
                             disabled={loading}
-                            className="w-full bg-green-700 text-white py-3.5 rounded-lg font-bold hover:bg-green-800 transition-colors shadow-md"
+                            className="w-full bg-green-700 text-white py-3.5 rounded-lg font-bold hover:bg-green-800 transition-colors shadow-md flex justify-center items-center gap-2"
                         >
-                            {loading ? 'Memproses...' : 'Masuk ke Dashboard'}
+                            {loading ? <Loader2 className="animate-spin" /> : 'Masuk Dashboard'}
                         </button>
                     </form>
                 </div>
-
-                <div className="bg-gray-50 px-8 py-4 text-center text-xs text-gray-600 font-medium border-t border-gray-200">
-                    &copy; 2025 Desa Citamiang. All rights reserved.
-                </div>
             </div>
         </div>
+    )
+}
+
+// 3. Export default dibungkus Suspense agar tidak error di Next.js saat build
+export default function LoginPage() {
+    return (
+        <Suspense fallback={<div className="min-h-screen flex items-center justify-center text-white">Loading...</div>}>
+            <LoginForm />
+        </Suspense>
     )
 }
