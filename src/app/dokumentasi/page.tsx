@@ -32,7 +32,7 @@ export default async function DokumentasiPage() {
       <section className="bg-green-700 text-white py-20 px-4 text-center">
         <h1 className="text-4xl font-bold mb-4">Galeri Kegiatan Desa</h1>
         <p className="text-green-100 max-w-2xl mx-auto text-lg">
-          Rekam jejak kegiatan dan momen penting yang terjadi di Desa Sukamaju.
+          Rekam jejak kegiatan dan momen penting yang terjadi di Desa Citamiang.
         </p>
       </section>
 

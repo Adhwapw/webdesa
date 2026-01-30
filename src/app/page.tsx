@@ -2,7 +2,7 @@ import Image from "next/image";
 import { stripHtml } from "@/lib/utils";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
-import { Calendar, MapPin, Store, Users, ArrowRight, Quote, BarChart3, FileText, LandPlot } from "lucide-react";
+import { Calendar, MapPin, Store, Users, ArrowRight, Quote, BarChart3, FileText, LandPlot, Mars } from "lucide-react";
 import { Dokumentasi, Potensi, UMKM, PerangkatDesa, Banner } from "@/types";
 
 // Revalidate data setiap 60 detik agar data selalu update tanpa build ulang
@@ -30,11 +30,11 @@ interface HomePageData {
 async function getLatestData(): Promise<HomePageData> {
   try {
     const [
-      dokumentasi, 
-      potensi, 
-      umkm, 
-      perangkat, 
-      bannerData, 
+      dokumentasi,
+      potensi,
+      umkm,
+      perangkat,
+      bannerData,
       statistikData,
       countUmkm,
       countPotensi
@@ -43,11 +43,11 @@ async function getLatestData(): Promise<HomePageData> {
       supabase.from("dokumentasi").select("*").order("tanggal", { ascending: false }).limit(3),
       supabase.from("potensi").select("*").eq("status", "aktif").limit(3),
       supabase.from("umkm").select("*").eq("status", "aktif").limit(3),
-      
+
       // 2. Perangkat & Banner
       supabase.from("perangkat_desa").select("*").eq("status", "aktif").order("urutan", { ascending: true }).limit(1),
       supabase.from("banners").select("*").eq("status", "aktif").limit(1).maybeSingle(),
-      
+
       // 3. Data Statistik Manual (Misal: Penduduk)
       supabase.from("statistik").select("*").order("id", { ascending: true }),
 
@@ -83,7 +83,7 @@ const getStatTheme = (label: string) => {
   if (lowerLabel.includes('penduduk') || lowerLabel.includes('jiwa') || lowerLabel.includes('warga') || lowerLabel.includes('orang') || lowerLabel.includes('kk')) {
     return { icon: Users, color: 'text-blue-600', bg: 'bg-blue-50' };
   }
-  
+
   // 2. Ekonomi / UMKM (Store)
   if (lowerLabel.includes('umkm') || lowerLabel.includes('usaha') || lowerLabel.includes('dagang') || lowerLabel.includes('toko') || lowerLabel.includes('produk')) {
     return { icon: Store, color: 'text-orange-600', bg: 'bg-orange-50' };
@@ -97,6 +97,10 @@ const getStatTheme = (label: string) => {
   // 4. Kegiatan / Agenda (Calendar)
   if (lowerLabel.includes('kegiatan') || lowerLabel.includes('agenda') || lowerLabel.includes('acara')) {
     return { icon: Calendar, color: 'text-purple-600', bg: 'bg-purple-50' };
+  }
+
+  if (lowerLabel.includes('Laki-laki')) {
+    return { icon:Mars , color: 'text-purple-600', bg: 'bg-purple-50' };
   }
 
   // Default (Chart)
@@ -114,8 +118,8 @@ export default async function Home() {
 
   // GABUNGKAN DATA: Statistik Manual (DB) + Statistik Otomatis (Count Live)
   // Kita filter dulu agar tidak ada duplikasi jika admin sudah input manual "UMKM" di DB
-  const manualStats = statistik.filter(s => 
-    !s.label.toLowerCase().includes('umkm') && 
+  const manualStats = statistik.filter(s =>
+    !s.label.toLowerCase().includes('umkm') &&
     !s.label.toLowerCase().includes('potensi')
   );
 
@@ -153,7 +157,7 @@ export default async function Home() {
         <div className="relative h-full flex flex-col justify-end items-center text-white text-center px-4 z-10 pb-16 md:pb-32">
           <div className="max-w-4xl animate-fade-in-up">
             <span className="inline-block py-1 px-3 rounded-full bg-green-500/20 border border-green-400/30 backdrop-blur-md text-green-300 text-xs md:text-sm font-medium mb-4">
-              Website Resmi Pemerintah Desa
+              Website Resmi Desa Citamiang
             </span>
             <h1 className="text-3xl sm:text-4xl md:text-6xl font-bold mb-4 md:mb-6 drop-shadow-lg leading-tight">
               {heroData.judul}
@@ -201,7 +205,7 @@ export default async function Home() {
           <div className="max-w-6xl mx-auto px-4">
             <div className="bg-white rounded-3xl p-6 md:p-12 shadow-xl border border-gray-100 relative overflow-hidden flex flex-col md:flex-row items-center gap-8 md:gap-16">
               <div className="absolute top-0 right-0 w-64 h-64 bg-green-50 rounded-full -translate-y-1/2 translate-x-1/2 opacity-50"></div>
-              
+
               <div className="relative shrink-0 mt-4 md:mt-0">
                 <div className="w-40 h-40 md:w-64 md:h-64 rounded-full overflow-hidden border-[6px] border-white shadow-2xl relative z-10 mx-auto">
                   {kepalaDesa.foto_url ? (
