@@ -61,7 +61,7 @@ export default function TentangPage() {
             <section className="relative h-[400px] bg-green-900 flex items-center justify-center overflow-hidden">
                 <div className="absolute inset-0 opacity-20">
                     <Image
-                        src="/public/images/gambar drone maniis.jpg"
+                        src="/images/gambar drone maniis.jpg"
                         alt="Desa Citamiang"
                         fill
                         className="object-cover"
