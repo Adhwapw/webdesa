@@ -4,7 +4,8 @@ import { useState, useEffect, FormEvent, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { stripHtml } from '@/lib/utils'
 import { UMKM } from '@/types'
-import { Loader2, Plus, Trash2, Store, User, Phone, Image as ImageIcon, UploadCloud, X, Tag } from 'lucide-react'
+// Tambahkan ikon Edit2
+import { Loader2, Plus, Trash2, Store, User, Phone, Image as ImageIcon, UploadCloud, X, Tag, Edit2 } from 'lucide-react'
 import Image from 'next/image'
 import TextEditor from '@/components/TextEditor'
 import toast from 'react-hot-toast'
@@ -15,6 +16,10 @@ export default function AdminUMKMPage() {
     const [loading, setLoading] = useState(true)
     const [uploading, setUploading] = useState(false)
     const [isDragging, setIsDragging] = useState(false)
+
+    // --- State Baru untuk Fitur Edit ---
+    const [isEditing, setIsEditing] = useState(false)
+    const [editId, setEditId] = useState<number | null>(null)
 
     // State Modal Delete
     const [isDeleteOpen, setIsDeleteOpen] = useState(false)
@@ -49,6 +54,31 @@ export default function AdminUMKMPage() {
         }
     }
 
+    // Fungsi untuk mereset form ke kondisi awal
+    const resetForm = () => {
+        setNamaUmkm('')
+        setPemilik('')
+        setKontak('')
+        setKategori('Makanan')
+        setDeskripsi('')
+        setFile(null)
+        setIsEditing(false)
+        setEditId(null)
+        if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+
+    // Fungsi untuk memicu mode edit
+    const handleEdit = (item: UMKM) => {
+        setIsEditing(true)
+        setEditId(item.id)
+        setNamaUmkm(item.nama_umkm)
+        setPemilik(item.pemilik)
+        setKontak(item.kontak)
+        setKategori(item.kategori)
+        setDeskripsi(item.deskripsi)
+        window.scrollTo({ top: 0, behavior: 'smooth' }) // Scroll ke atas menuju form
+    }
+
     const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); setIsDragging(true) }
     const handleDragLeave = (e: React.DragEvent) => { e.preventDefault(); setIsDragging(false) }
     const handleDrop = (e: React.DragEvent) => {
@@ -64,65 +94,82 @@ export default function AdminUMKMPage() {
         if (fileInputRef.current) fileInputRef.current.value = ''
     }
 
-    const handleUpload = async (e: FormEvent) => {
+    // Fungsi Submit yang digabung (Insert & Update)
+    const handleSubmit = async (e: FormEvent) => {
         e.preventDefault()
 
-        if (!file) return toast.error('Pilih foto produk terlebih dahulu')
+        // Validasi: Jika tambah baru harus ada file, jika edit boleh kosong (pakai foto lama)
+        if (!file && !isEditing) return toast.error('Pilih foto produk terlebih dahulu')
 
-        // Validasi 5MB
-        if (file.size > 5 * 1024 * 1024) {
+        if (file && file.size > 5 * 1024 * 1024) {
             toast.error('Foto produk terlalu besar (Max 5MB).')
             return
         }
 
-        if (!file.type.startsWith('image/')) {
-            toast.error('File harus berupa gambar.')
-            return
-        }
-
         setUploading(true)
-        const toastId = toast.loading('Menyimpan UMKM...')
+        const toastId = toast.loading(isEditing ? 'Memperbarui UMKM...' : 'Menyimpan UMKM...')
 
         try {
-            const fileExt = file.name.split('.').pop()
-            const fileName = `${Date.now()}.${fileExt}`
-            const filePath = `${fileName}`
+            let finalFotoUrl = ''
+            
+            // Jika ada file baru yang diunggah
+            if (file) {
+                const fileExt = file.name.split('.').pop()
+                const fileName = `${Date.now()}.${fileExt}`
+                const filePath = `${fileName}`
 
-            const { error: uploadError } = await supabase.storage
-                .from('umkm')
-                .upload(filePath, file)
+                const { error: uploadError } = await supabase.storage
+                    .from('umkm')
+                    .upload(filePath, file)
 
-            if (uploadError) throw uploadError
+                if (uploadError) throw uploadError
 
-            const { data: { publicUrl } } = supabase.storage
-                .from('umkm')
-                .getPublicUrl(filePath)
+                const { data: { publicUrl } } = supabase.storage
+                    .from('umkm')
+                    .getPublicUrl(filePath)
+                
+                finalFotoUrl = publicUrl
+            } else if (isEditing) {
+                // Jika sedang edit dan tidak ganti foto, ambil foto lama
+                const existingData = data.find(i => i.id === editId)
+                finalFotoUrl = existingData?.foto_url || ''
+            }
 
-            const { error: dbError } = await supabase
-                .from('umkm')
-                .insert([{
-                    nama_umkm: namaUmkm,
-                    pemilik,
-                    kontak,
-                    kategori,
-                    deskripsi,
-                    foto_url: publicUrl,
-                    status: 'aktif'
-                }])
+            const payload = {
+                nama_umkm: namaUmkm,
+                pemilik,
+                kontak,
+                kategori,
+                deskripsi,
+                foto_url: finalFotoUrl,
+                status: 'aktif'
+            }
 
-            if (dbError) throw dbError
+            if (isEditing && editId) {
+                // LOGIKA UPDATE
+                const { error: dbError } = await supabase
+                    .from('umkm')
+                    .update(payload)
+                    .eq('id', editId)
 
-            setNamaUmkm(''); setPemilik(''); setKontak(''); setDeskripsi('');
-            removeFile();
-            fetchData();
+                if (dbError) throw dbError
+                toast.success('UMKM berhasil diperbarui!', { id: toastId })
+            } else {
+                // LOGIKA INSERT
+                const { error: dbError } = await supabase
+                    .from('umkm')
+                    .insert([payload])
 
-            toast.dismiss(toastId)
-            toast.success('UMKM berhasil ditambahkan!')
+                if (dbError) throw dbError
+                toast.success('UMKM berhasil ditambahkan!', { id: toastId })
+            }
+
+            resetForm()
+            fetchData()
 
         } catch (error) {
             console.error('Error:', error)
-            toast.dismiss(toastId)
-            toast.error('Gagal menyimpan data UMKM.')
+            toast.error('Gagal memproses data UMKM.', { id: toastId })
         } finally {
             setUploading(false)
         }
@@ -168,13 +215,12 @@ export default function AdminUMKMPage() {
 
             <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 mb-8">
                 <h2 className="text-lg font-semibold mb-6 flex items-center gap-2 text-yellow-900 border-b pb-2">
-                    <Plus size={20} /> Tambah UMKM Baru
+                    {isEditing ? <Edit2 size={20} /> : <Plus size={20} />} 
+                    {isEditing ? 'Edit UMKM' : 'Tambah UMKM Baru'}
                 </h2>
 
-                {/* --- PERUBAHAN LAYOUT DI SINI --- */}
-                <form onSubmit={handleUpload} className="grid md:grid-cols-2 gap-8">
-
-                    {/* KOLOM KIRI: Input Data & Foto */}
+                <form onSubmit={handleSubmit} className="grid md:grid-cols-2 gap-8">
+                    {/* KOLOM KIRI */}
                     <div className="space-y-5">
                         <div>
                             <label className={labelClass}>Nama Usaha/Produk</label>
@@ -240,9 +286,8 @@ export default function AdminUMKMPage() {
                             </div>
                         </div>
 
-                        {/* DRAG & DROP DIPINDAH KE SINI (KIRI) */}
                         <div>
-                            <label className={labelClass}>Foto Produk</label>
+                            <label className={labelClass}>Foto Produk {isEditing && <span className="text-gray-400 font-normal">(Kosongkan jika tidak ingin ganti)</span>}</label>
                             {!file ? (
                                 <div
                                     onDragOver={handleDragOver}
@@ -254,7 +299,7 @@ export default function AdminUMKMPage() {
                                 >
                                     <input type="file" accept="image/*" ref={fileInputRef} onChange={e => setFile(e.target.files?.[0] || null)} className="hidden" />
                                     <UploadCloud className="mx-auto text-gray-500 mb-2" size={32} />
-                                    <p className="text-sm text-gray-700 font-medium">Klik atau Drag foto kesini</p>
+                                    <p className="text-sm text-gray-700 font-medium">Klik atau Drag foto baru</p>
                                     <p className="text-xs text-red-500 mt-1 font-bold">*Maksimal 5MB</p>
                                 </div>
                             ) : (
@@ -267,7 +312,7 @@ export default function AdminUMKMPage() {
                         </div>
                     </div>
 
-                    {/* KOLOM KANAN: Deskripsi & Tombol */}
+                    {/* KOLOM KANAN */}
                     <div className="flex flex-col h-full">
                         <label className={labelClass}>Deskripsi Produk & Usaha</label>
                         <div className="flex-1">
@@ -277,14 +322,25 @@ export default function AdminUMKMPage() {
                             />
                         </div>
 
-                        <button
-                            disabled={uploading}
-                            type="submit"
-                            className={`w-full bg-orange-600 text-white px-4 py-3 rounded-lg hover:bg-orange-700 flex items-center justify-center gap-2 font-bold mt-4 shadow-md transition-transform active:scale-95 ${uploading ? 'opacity-50 cursor-not-allowed' : ''}`}
-                        >
-                            {uploading ? <Loader2 className="animate-spin" /> : <Plus size={20} />}
-                            {uploading ? 'Menyimpan...' : 'Simpan UMKM'}
-                        </button>
+                        <div className="flex gap-3 mt-4">
+                            {isEditing && (
+                                <button
+                                    type="button"
+                                    onClick={resetForm}
+                                    className="flex-1 bg-gray-200 text-gray-700 px-4 py-3 rounded-lg font-bold hover:bg-gray-300 transition-all"
+                                >
+                                    Batal
+                                </button>
+                            )}
+                            <button
+                                disabled={uploading}
+                                type="submit"
+                                className={`${isEditing ? 'flex-[2]' : 'w-full'} bg-orange-600 text-white px-4 py-3 rounded-lg hover:bg-orange-700 flex items-center justify-center gap-2 font-bold shadow-md transition-transform active:scale-95 ${uploading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                            >
+                                {uploading ? <Loader2 className="animate-spin" /> : (isEditing ? <Edit2 size={20} /> : <Plus size={20} />)}
+                                {uploading ? 'Menyimpan...' : (isEditing ? 'Simpan Perubahan' : 'Simpan UMKM')}
+                            </button>
+                        </div>
                     </div>
                 </form>
             </div>
@@ -317,16 +373,26 @@ export default function AdminUMKMPage() {
                             </div>
 
                             <p className="text-gray-500 text-sm line-clamp-2 mb-4 h-10 whitespace-pre-line">
-                                {stripHtml(item.deskripsi,8)}
+                                {stripHtml(item.deskripsi, 8)}
                             </p>
 
                             <div className="pt-3 border-t flex justify-between items-center">
-                                <button
-                                    onClick={() => toggleStatus(item.id, item.status)}
-                                    className={`text-xs font-semibold px-3 py-1.5 rounded-md transition-colors ${item.status === 'aktif' ? 'bg-red-50 text-red-600 hover:bg-red-100' : 'bg-green-50 text-green-600 hover:bg-green-100'}`}
-                                >
-                                    {item.status === 'aktif' ? 'Non-aktifkan' : 'Aktifkan'}
-                                </button>
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={() => toggleStatus(item.id, item.status)}
+                                        className={`text-xs font-semibold px-3 py-1.5 rounded-md transition-colors ${item.status === 'aktif' ? 'bg-red-50 text-red-600 hover:bg-red-100' : 'bg-green-50 text-green-600 hover:bg-green-100'}`}
+                                    >
+                                        {item.status === 'aktif' ? 'Non-aktifkan' : 'Aktifkan'}
+                                    </button>
+                                    {/* TOMBOL EDIT */}
+                                    <button
+                                        onClick={() => handleEdit(item)}
+                                        className="text-blue-600 hover:bg-blue-50 p-1.5 rounded-md transition-colors"
+                                        title="Edit Data"
+                                    >
+                                        <Edit2 size={18} />
+                                    </button>
+                                </div>
                                 <button
                                     onClick={() => openDeleteModal(item.id)}
                                     className="text-gray-400 hover:text-red-500 p-1 transition-colors"
