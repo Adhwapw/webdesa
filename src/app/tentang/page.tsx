@@ -64,6 +64,7 @@ export default function TentangPage() {
                         src="/images/gambar drone maniis.jpg"
                         alt="Desa Citamiang"
                         fill
+                        priority
                         className="object-cover"
                     />
                 </div>
